@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  html {
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-surface text-white font-sans antialiased;
+    overscroll-behavior: none;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@layer components {
+  /* Score Button Base */
+  .score-btn {
+    @apply relative flex flex-col items-center justify-center;
+    @apply rounded-2xl font-display font-bold;
+    @apply transition-all duration-100 ease-out;
+    @apply shadow-score active:shadow-score-active;
+    @apply active:scale-95 active:brightness-90;
+    @apply select-none cursor-pointer;
+    @apply border-2 border-white/10;
+    min-height: 80px;
+  }
+
+  .score-btn:active {
+    transform: scale(0.95);
+  }
+
+  .score-btn--parent {
+    @apply bg-gradient-to-b from-amber-500 to-amber-600;
+    @apply border-amber-400/30;
+    @apply text-amber-950;
+  }
+
+  .score-btn--child {
+    @apply bg-gradient-to-b from-blue-500 to-blue-600;
+    @apply border-blue-400/30;
+    @apply text-white;
+  }
+
+  .score-btn--rare {
+    @apply bg-gradient-to-b from-pink-500 to-pink-600;
+    @apply border-pink-400/30;
+    @apply text-white;
+  }
+
+  .score-btn--tsumo {
+    @apply bg-gradient-to-b from-violet-500 to-violet-600;
+    @apply border-violet-400/30;
+    @apply text-white;
+  }
+
+  /* Mode Toggle */
+  .mode-toggle {
+    @apply relative flex rounded-xl overflow-hidden;
+    @apply bg-surface-light border border-white/10;
+  }
+
+  .mode-toggle__option {
+    @apply px-6 py-3 font-bold text-lg transition-all duration-200;
+    @apply flex items-center justify-center;
+  }
+
+  .mode-toggle__option--active {
+    @apply text-white;
+  }
+
+  .mode-toggle__option--inactive {
+    @apply text-white/40;
+  }
+
+  /* Honba Selector */
+  .honba-btn {
+    @apply w-12 h-12 rounded-xl font-bold text-lg;
+    @apply flex items-center justify-center;
+    @apply transition-all duration-150;
+    @apply border-2;
+  }
+
+  .honba-btn--active {
+    @apply bg-primary-600 border-primary-400 text-white;
+    @apply shadow-glow;
+  }
+
+  .honba-btn--inactive {
+    @apply bg-surface-light border-white/10 text-white/50;
+    @apply hover:bg-surface-lighter hover:text-white/70;
+  }
+
+  /* Settings Slider */
+  .settings-slider {
+    @apply w-full h-2 rounded-full appearance-none;
+    @apply bg-surface-lighter;
+  }
+
+  .settings-slider::-webkit-slider-thumb {
+    @apply appearance-none w-6 h-6 rounded-full;
+    @apply bg-primary-500 cursor-pointer;
+    @apply shadow-lg;
+  }
+
+  /* Panel */
+  .panel {
+    @apply bg-surface-light rounded-2xl p-4;
+    @apply border border-white/10;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/20 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/30;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .glass {
+    @apply bg-white/5 backdrop-blur-lg;
+  }
+}
