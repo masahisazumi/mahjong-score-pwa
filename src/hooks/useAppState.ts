@@ -4,7 +4,7 @@ import { AppState, PlayerType, PitchLevel, Settings } from '../types'
 const STORAGE_KEY = 'mahjong-score-settings'
 
 const defaultSettings: Settings = {
-  volume: 0.8,
+  volume: 1.0,
   playbackSpeed: 1.0,
   pitch: 'normal',
 }
