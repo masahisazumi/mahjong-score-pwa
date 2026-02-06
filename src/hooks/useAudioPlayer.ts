@@ -1,16 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react'
 import { Settings, PitchLevel } from '../types'
 
-// Audio context for advanced playback control
-let audioContext: AudioContext | null = null
-
-function getAudioContext(): AudioContext {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-  }
-  return audioContext
-}
-
 // Pitch shift multipliers
 const pitchMultipliers: Record<PitchLevel, number> = {
   low: 0.85,
@@ -18,98 +8,71 @@ const pitchMultipliers: Record<PitchLevel, number> = {
   high: 1.15,
 }
 
+// Cached Japanese voice for SpeechSynthesis
+let cachedJapaneseVoice: SpeechSynthesisVoice | null = null
+
+function findJapaneseVoice(): SpeechSynthesisVoice | null {
+  if (cachedJapaneseVoice) return cachedJapaneseVoice
+  const synth = window.speechSynthesis
+  if (!synth) return null
+  const voices = synth.getVoices()
+  const otoya = voices.find(v => v.name.includes('Otoya'))
+  const japanese = otoya || voices.find(v => v.lang.startsWith('ja'))
+  if (japanese) cachedJapaneseVoice = japanese
+  return japanese || null
+}
+
 export function useAudioPlayer(settings: Settings) {
-  const audioBufferCache = useRef<Map<string, AudioBuffer>>(new Map())
-  const currentSource = useRef<AudioBufferSourceNode | null>(null)
+  const currentAudio = useRef<HTMLAudioElement | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
-  // Preload audio files
-  const preloadAudio = useCallback(async (urls: string[]) => {
-    const ctx = getAudioContext()
-
-    await Promise.all(
-      urls.map(async (url) => {
-        if (audioBufferCache.current.has(url)) return
-
-        try {
-          const response = await fetch(url)
-          const arrayBuffer = await response.arrayBuffer()
-          const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
-          audioBufferCache.current.set(url, audioBuffer)
-        } catch (error) {
-          console.warn(`Failed to preload audio: ${url}`, error)
-        }
-      })
-    )
+  // Pre-load SpeechSynthesis voices (async on many browsers)
+  useEffect(() => {
+    findJapaneseVoice()
+    if (window.speechSynthesis) {
+      window.speechSynthesis.addEventListener('voiceschanged', findJapaneseVoice)
+      return () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', findJapaneseVoice)
+      }
+    }
   }, [])
 
-  // Play audio with current settings
-  const playAudio = useCallback(async (url: string) => {
-    const ctx = getAudioContext()
-
-    // Resume context if suspended (required for iOS)
-    if (ctx.state === 'suspended') {
-      await ctx.resume()
-    }
-
-    // Stop any currently playing audio
-    if (currentSource.current) {
-      try {
-        currentSource.current.stop()
-      } catch {
-        // Ignore errors from already stopped sources
-      }
-    }
-
-    // Get or load the audio buffer
-    let buffer = audioBufferCache.current.get(url)
-    if (!buffer) {
-      try {
-        const response = await fetch(url)
-        const arrayBuffer = await response.arrayBuffer()
-        buffer = await ctx.decodeAudioData(arrayBuffer)
-        audioBufferCache.current.set(url, buffer)
-      } catch (error) {
-        console.error('Failed to load audio:', error)
-        return
-      }
-    }
-
-    // Create audio nodes
-    const source = ctx.createBufferSource()
-    const gainNode = ctx.createGain()
-
-    source.buffer = buffer
-    source.playbackRate.value = settings.playbackSpeed * pitchMultipliers[settings.pitch]
-    gainNode.gain.value = settings.volume
-
-    // Connect nodes
-    source.connect(gainNode)
-    gainNode.connect(ctx.destination)
-
-    // Store reference and play
-    currentSource.current = source
-    source.start(0)
-
-    // Clean up when finished
-    source.onended = () => {
-      currentSource.current = null
-    }
-  }, [settings])
-
-  // Stop currently playing audio and speech
-  const stopAudio = useCallback(() => {
-    if (currentSource.current) {
-      try {
-        currentSource.current.stop()
-      } catch {
-        // Ignore
-      }
-      currentSource.current = null
+  // Play audio file using HTML5 Audio (reliable on iOS/Android)
+  const playAudio = useCallback((url: string) => {
+    // Stop any currently playing audio/speech
+    if (currentAudio.current) {
+      currentAudio.current.pause()
+      currentAudio.current.currentTime = 0
+      currentAudio.current = null
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
+    }
+
+    const audio = new Audio(url)
+    audio.volume = settingsRef.current.volume
+    const rate = settingsRef.current.playbackSpeed * pitchMultipliers[settingsRef.current.pitch]
+    audio.playbackRate = rate
+
+    // Disable preservesPitch so playbackRate also changes pitch
+    // (matches the previous Web Audio API behavior)
+    const a = audio as any
+    if ('preservesPitch' in audio) (audio as any).preservesPitch = false
+    if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
+    if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
+
+    currentAudio.current = audio
+
+    // play() returns a promise - must be called synchronously from user gesture
+    audio.play().catch(err => {
+      console.error('Audio play failed:', err)
+    })
+
+    audio.onended = () => {
+      if (currentAudio.current === audio) {
+        currentAudio.current = null
+      }
     }
   }, [])
 
@@ -119,15 +82,12 @@ export function useAudioPlayer(settings: Settings) {
     if (!synth) return
 
     // Stop any current audio/speech
-    synth.cancel()
-    if (currentSource.current) {
-      try {
-        currentSource.current.stop()
-      } catch {
-        // Ignore
-      }
-      currentSource.current = null
+    if (currentAudio.current) {
+      currentAudio.current.pause()
+      currentAudio.current.currentTime = 0
+      currentAudio.current = null
     }
+    synth.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ja-JP'
@@ -135,41 +95,32 @@ export function useAudioPlayer(settings: Settings) {
     utterance.volume = settingsRef.current.volume
     utterance.pitch = pitchMultipliers[settingsRef.current.pitch]
 
-    // Try to find a Japanese voice (prefer Otoya to match pre-generated audio)
-    const voices = synth.getVoices()
-    const otoya = voices.find(v => v.name.includes('Otoya'))
-    const japaneseVoice = otoya || voices.find(v => v.lang.startsWith('ja'))
-    if (japaneseVoice) utterance.voice = japaneseVoice
+    const voice = findJapaneseVoice()
+    if (voice) utterance.voice = voice
 
     synth.speak(utterance)
   }, [])
 
-  // Initialize audio context on first user interaction
-  useEffect(() => {
-    const initAudio = () => {
-      getAudioContext()
-      document.removeEventListener('touchstart', initAudio)
-      document.removeEventListener('click', initAudio)
+  // Stop currently playing audio and speech
+  const stopAudio = useCallback(() => {
+    if (currentAudio.current) {
+      currentAudio.current.pause()
+      currentAudio.current.currentTime = 0
+      currentAudio.current = null
     }
-
-    document.addEventListener('touchstart', initAudio, { once: true })
-    document.addEventListener('click', initAudio, { once: true })
-
-    return () => {
-      document.removeEventListener('touchstart', initAudio)
-      document.removeEventListener('click', initAudio)
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel()
     }
   }, [])
 
   return {
     playAudio,
-    preloadAudio,
     stopAudio,
     speakText,
   }
 }
 
-// Generate placeholder audio URL based on score
+// Generate audio URL based on score
 export function getAudioUrl(scoreId: string, isRon: boolean, isParent: boolean): string {
   const type = isRon ? 'ron' : 'tsumo'
   const player = isParent ? 'parent' : 'child'
