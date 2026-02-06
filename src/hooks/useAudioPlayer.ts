@@ -21,6 +21,8 @@ const pitchMultipliers: Record<PitchLevel, number> = {
 export function useAudioPlayer(settings: Settings) {
   const audioBufferCache = useRef<Map<string, AudioBuffer>>(new Map())
   const currentSource = useRef<AudioBufferSourceNode | null>(null)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
 
   // Preload audio files
   const preloadAudio = useCallback(async (urls: string[]) => {
@@ -96,7 +98,7 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [settings])
 
-  // Stop currently playing audio
+  // Stop currently playing audio and speech
   const stopAudio = useCallback(() => {
     if (currentSource.current) {
       try {
@@ -106,6 +108,40 @@ export function useAudioPlayer(settings: Settings) {
       }
       currentSource.current = null
     }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+  }, [])
+
+  // Speak Japanese text using SpeechSynthesis (for honba announcements)
+  const speakText = useCallback((text: string) => {
+    const synth = window.speechSynthesis
+    if (!synth) return
+
+    // Stop any current audio/speech
+    synth.cancel()
+    if (currentSource.current) {
+      try {
+        currentSource.current.stop()
+      } catch {
+        // Ignore
+      }
+      currentSource.current = null
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'ja-JP'
+    utterance.rate = settingsRef.current.playbackSpeed
+    utterance.volume = settingsRef.current.volume
+    utterance.pitch = pitchMultipliers[settingsRef.current.pitch]
+
+    // Try to find a Japanese voice (prefer Otoya to match pre-generated audio)
+    const voices = synth.getVoices()
+    const otoya = voices.find(v => v.name.includes('Otoya'))
+    const japaneseVoice = otoya || voices.find(v => v.lang.startsWith('ja'))
+    if (japaneseVoice) utterance.voice = japaneseVoice
+
+    synth.speak(utterance)
   }, [])
 
   // Initialize audio context on first user interaction
@@ -129,6 +165,7 @@ export function useAudioPlayer(settings: Settings) {
     playAudio,
     preloadAudio,
     stopAudio,
+    speakText,
   }
 }
 

@@ -130,6 +130,11 @@ export function getFilteredScores(
     .map(score => adjustScoreForHonba(score, honba))
 }
 
+// Get base score by ID (before honba adjustment)
+export function getBaseScoreById(id: string): ScoreEntry | undefined {
+  return scoreTable.find(s => s.id === id)
+}
+
 // Format score for display
 export function formatScore(score: number): string {
   return score.toLocaleString('ja-JP')
@@ -143,4 +148,76 @@ export function formatTsumoScore(parentPay: number, childPay: number): string {
 // Format all-pay tsumo (everyone pays X)
 export function formatAllTsumo(amount: number): string {
   return `${formatScore(amount)}オール`
+}
+
+// Convert number to Japanese katakana reading for TTS
+export function numberToJapanese(num: number): string {
+  if (num === 0) return 'ゼロ'
+
+  let result = ''
+  let remaining = num
+
+  // 万 (10000s)
+  const man = Math.floor(remaining / 10000)
+  if (man > 0) {
+    const manPrefixes: Record<number, string> = {
+      1: 'イチ', 2: 'ニ', 3: 'サン', 4: 'ヨン', 5: 'ゴ',
+      6: 'ロク', 7: 'ナナ', 8: 'ハチ', 9: 'キュウ',
+    }
+    result += manPrefixes[man] + 'マン'
+    remaining %= 10000
+  }
+
+  // 千 (1000s)
+  const sen = Math.floor(remaining / 1000)
+  if (sen > 0) {
+    const senReadings: Record<number, string> = {
+      1: 'セン', 2: 'ニセン', 3: 'サンゼン', 4: 'ヨンセン', 5: 'ゴセン',
+      6: 'ロクセン', 7: 'ナナセン', 8: 'ハッセン', 9: 'キュウセン',
+    }
+    result += senReadings[sen]
+    remaining %= 1000
+  }
+
+  // 百 (100s)
+  const hyaku = Math.floor(remaining / 100)
+  if (hyaku > 0) {
+    const hyakuReadings: Record<number, string> = {
+      1: 'ヒャク', 2: 'ニヒャク', 3: 'サンビャク', 4: 'ヨンヒャク', 5: 'ゴヒャク',
+      6: 'ロッピャク', 7: 'ナナヒャク', 8: 'ハッピャク', 9: 'キュウヒャク',
+    }
+    result += hyakuReadings[hyaku]
+  }
+
+  return result
+}
+
+// Generate announcement text for TTS when honba > 0
+// Format: "base わ、adjusted" (は is written as わ to ensure "wa" pronunciation)
+export function generateAnnouncementText(
+  baseScore: ScoreEntry,
+  adjustedScore: ScoreEntry,
+  playerType: 'parent' | 'child',
+  type: 'ron' | 'tsumo'
+): string {
+  if (type === 'ron') {
+    const base = playerType === 'parent' ? baseScore.parentRon : baseScore.childRon
+    const adjusted = playerType === 'parent' ? adjustedScore.parentRon : adjustedScore.childRon
+    if (!base || !adjusted) return ''
+    return `${numberToJapanese(base)}わ、${numberToJapanese(adjusted)}`
+  } else {
+    if (playerType === 'parent') {
+      const base = baseScore.parentTsumoAll
+      const adjusted = adjustedScore.parentTsumoAll
+      if (!base || !adjusted) return ''
+      return `${numberToJapanese(base)}わ、${numberToJapanese(adjusted)}オール`
+    } else {
+      const baseChild = baseScore.childTsumoChild
+      const baseParent = baseScore.childTsumoParent
+      const adjChild = adjustedScore.childTsumoChild
+      const adjParent = adjustedScore.childTsumoParent
+      if (!baseChild || !baseParent || !adjChild || !adjParent) return ''
+      return `${numberToJapanese(baseChild)}、${numberToJapanese(baseParent)}わ、${numberToJapanese(adjChild)}、${numberToJapanese(adjParent)}`
+    }
+  }
 }

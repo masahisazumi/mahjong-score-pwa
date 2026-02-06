@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { ScoreEntry, PlayerType } from '../types'
-import { getFilteredScores, formatScore, formatTsumoScore, formatAllTsumo } from '../data/scores'
+import { getFilteredScores, formatScore, formatTsumoScore, formatAllTsumo, getBaseScoreById } from '../data/scores'
 
 interface ScoreGridOptimizedProps {
   playerType: PlayerType
@@ -14,24 +14,66 @@ const OptimizedScoreButton: React.FC<{
   score: ScoreEntry
   playerType: PlayerType
   type: 'ron' | 'tsumo'
+  honba: number
   onPress: () => void
-}> = React.memo(({ score, playerType, type, onPress }) => {
-  // Calculate display value
-  const displayValue = useMemo(() => {
-    if (type === 'ron') {
-      const ronScore = playerType === 'parent' ? score.parentRon : score.childRon
-      return ronScore ? formatScore(ronScore) : '-'
-    } else {
-      if (playerType === 'parent') {
-        return score.parentTsumoAll ? formatAllTsumo(score.parentTsumoAll) : '-'
-      } else {
-        if (score.childTsumoParent && score.childTsumoChild) {
-          return formatTsumoScore(score.childTsumoParent, score.childTsumoChild)
+}> = React.memo(({ score, playerType, type, honba, onPress }) => {
+  // Calculate display values (base and adjusted for honba > 0)
+  const { baseText, adjustedText, singleText } = useMemo(() => {
+    if (honba > 0) {
+      const baseScore = getBaseScoreById(score.id)
+      if (baseScore) {
+        if (type === 'ron') {
+          const base = playerType === 'parent' ? baseScore.parentRon : baseScore.childRon
+          const adjusted = playerType === 'parent' ? score.parentRon : score.childRon
+          if (base && adjusted) {
+            return {
+              baseText: `${formatScore(base)}は`,
+              adjustedText: formatScore(adjusted),
+              singleText: null,
+            }
+          }
+        } else {
+          if (playerType === 'parent') {
+            const base = baseScore.parentTsumoAll
+            const adjusted = score.parentTsumoAll
+            if (base && adjusted) {
+              return {
+                baseText: `${formatScore(base)}は`,
+                adjustedText: `${formatScore(adjusted)}オール`,
+                singleText: null,
+              }
+            }
+          } else {
+            const baseChild = baseScore.childTsumoChild
+            const baseParent = baseScore.childTsumoParent
+            const adjChild = score.childTsumoChild
+            const adjParent = score.childTsumoParent
+            if (baseChild && baseParent && adjChild && adjParent) {
+              return {
+                baseText: `${formatScore(baseChild)}/${formatScore(baseParent)}は`,
+                adjustedText: `${formatScore(adjChild)}/${formatScore(adjParent)}`,
+                singleText: null,
+              }
+            }
+          }
         }
-        return '-'
       }
     }
-  }, [score, playerType, type])
+
+    // 0本場 or fallback: single display value
+    let single: string
+    if (type === 'ron') {
+      const ronScore = playerType === 'parent' ? score.parentRon : score.childRon
+      single = ronScore ? formatScore(ronScore) : '-'
+    } else if (playerType === 'parent') {
+      single = score.parentTsumoAll ? formatAllTsumo(score.parentTsumoAll) : '-'
+    } else {
+      single = (score.childTsumoParent && score.childTsumoChild)
+        ? formatTsumoScore(score.childTsumoParent, score.childTsumoChild)
+        : '-'
+    }
+    return { baseText: null, adjustedText: null, singleText: single }
+  }, [score, playerType, type, honba])
 
   // Style classes based on score type
   const buttonClass = useMemo(() => {
@@ -74,9 +116,20 @@ const OptimizedScoreButton: React.FC<{
       </span>
 
       {/* Main Score */}
-      <span className="text-lg font-bold leading-tight text-shadow">
-        {displayValue}
-      </span>
+      {baseText ? (
+        <>
+          <span className="text-[10px] opacity-50 leading-tight">
+            {baseText}
+          </span>
+          <span className="text-base font-bold leading-tight text-shadow">
+            {adjustedText}
+          </span>
+        </>
+      ) : (
+        <span className="text-lg font-bold leading-tight text-shadow">
+          {singleText}
+        </span>
+      )}
 
       {/* Type indicator */}
       <span className="absolute bottom-0.5 right-1.5 text-[8px] opacity-40">
@@ -141,6 +194,7 @@ export const ScoreGridOptimized: React.FC<ScoreGridOptimizedProps> = ({
                 score={score}
                 playerType={playerType}
                 type="ron"
+                honba={honba}
                 onPress={() => onScorePress(score, 'ron')}
               />
             ))}
@@ -161,6 +215,7 @@ export const ScoreGridOptimized: React.FC<ScoreGridOptimizedProps> = ({
                     score={score}
                     playerType={playerType}
                     type="ron"
+                    honba={honba}
                     onPress={() => onScorePress(score, 'ron')}
                   />
                 ))}
@@ -187,6 +242,7 @@ export const ScoreGridOptimized: React.FC<ScoreGridOptimizedProps> = ({
                 score={score}
                 playerType={playerType}
                 type="tsumo"
+                honba={honba}
                 onPress={() => onScorePress(score, 'tsumo')}
               />
             ))}
@@ -207,6 +263,7 @@ export const ScoreGridOptimized: React.FC<ScoreGridOptimizedProps> = ({
                     score={score}
                     playerType={playerType}
                     type="tsumo"
+                    honba={honba}
                     onPress={() => onScorePress(score, 'tsumo')}
                   />
                 ))}

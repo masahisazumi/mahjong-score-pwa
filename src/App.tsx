@@ -2,6 +2,7 @@ import React, { useCallback } from 'react'
 import { ModeSelector, ScoreGridOptimized, SettingsPanel, ManualInput } from './components'
 import { useAppState } from './hooks/useAppState'
 import { useAudioPlayer, getAudioUrl } from './hooks/useAudioPlayer'
+import { getBaseScoreById, generateAnnouncementText } from './data/scores'
 import { ScoreEntry } from './types'
 
 const App: React.FC = () => {
@@ -19,18 +20,29 @@ const App: React.FC = () => {
     closeManualInput,
   } = useAppState()
 
-  const { playAudio } = useAudioPlayer(state.settings)
+  const { playAudio, speakText } = useAudioPlayer(state.settings)
 
   // Handle score button press
   const handleScorePress = useCallback((score: ScoreEntry, type: 'ron' | 'tsumo') => {
-    const audioUrl = getAudioUrl(score.id, type === 'ron', state.playerType === 'parent')
-    playAudio(audioUrl)
+    if (state.honba > 0) {
+      // Honba > 0: Use TTS to announce "base は adjusted" format
+      const baseScore = getBaseScoreById(score.id)
+      if (baseScore) {
+        const text = generateAnnouncementText(baseScore, score, state.playerType, type)
+        if (text) {
+          speakText(text)
+        }
+      }
+    } else {
+      // Honba 0: Play pre-generated audio file
+      const audioUrl = getAudioUrl(score.id, type === 'ron', state.playerType === 'parent')
+      playAudio(audioUrl)
+    }
 
-    // Visual feedback - could add haptic feedback on supported devices
     if (navigator.vibrate) {
       navigator.vibrate(50)
     }
-  }, [state.playerType, playAudio])
+  }, [state.playerType, state.honba, playAudio, speakText])
 
   // Handle manual input score
   const handleManualScore = useCallback((score: number) => {
