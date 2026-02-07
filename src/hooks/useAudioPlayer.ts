@@ -10,16 +10,37 @@ const pitchMultipliers: Record<PitchLevel, number> = {
 
 // Cached Japanese voice for SpeechSynthesis
 let cachedJapaneseVoice: SpeechSynthesisVoice | null = null
+let isPreferredVoice = false
+
+// Preferred male Japanese voices (in priority order)
+const PREFERRED_MALE_VOICES = ['Otoya', 'Hattori', 'Takumi']
 
 function findJapaneseVoice(): SpeechSynthesisVoice | null {
-  if (cachedJapaneseVoice) return cachedJapaneseVoice
+  // If already found a preferred (male) voice, keep it
+  if (cachedJapaneseVoice && isPreferredVoice) return cachedJapaneseVoice
+
   const synth = window.speechSynthesis
-  if (!synth) return null
+  if (!synth) return cachedJapaneseVoice
+
   const voices = synth.getVoices()
-  const otoya = voices.find(v => v.name.includes('Otoya'))
-  const japanese = otoya || voices.find(v => v.lang.startsWith('ja'))
-  if (japanese) cachedJapaneseVoice = japanese
-  return japanese || null
+  if (voices.length === 0) return cachedJapaneseVoice
+
+  // Search for preferred male voices first
+  for (const name of PREFERRED_MALE_VOICES) {
+    const voice = voices.find(v => v.name.includes(name))
+    if (voice) {
+      cachedJapaneseVoice = voice
+      isPreferredVoice = true
+      return voice
+    }
+  }
+
+  // Fallback: any Japanese voice (may be female)
+  if (!cachedJapaneseVoice) {
+    const japanese = voices.find(v => v.lang.startsWith('ja'))
+    if (japanese) cachedJapaneseVoice = japanese
+  }
+  return cachedJapaneseVoice
 }
 
 export function useAudioPlayer(settings: Settings) {
