@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { AppState, PlayerType, PitchLevel, Settings } from '../types'
+import { AppState, PlayerType, Settings } from '../types'
 
 const STORAGE_KEY = 'mahjong-score-settings'
 
 const defaultSettings: Settings = {
   volume: 1.0,
   playbackSpeed: 1.0,
-  pitch: 'normal',
+  pitch: 1.0,
 }
 
 const defaultState: AppState = {
@@ -22,7 +22,13 @@ function loadSettings(): Settings {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      return { ...defaultSettings, ...JSON.parse(saved) }
+      const parsed = JSON.parse(saved)
+      // Migrate old string pitch ('low'/'normal'/'high') to numeric value
+      if (typeof parsed.pitch === 'string') {
+        const pitchMap: Record<string, number> = { low: 0.75, normal: 1.0, high: 1.5 }
+        parsed.pitch = pitchMap[parsed.pitch] ?? 1.0
+      }
+      return { ...defaultSettings, ...parsed }
     }
   } catch {
     console.warn('Failed to load settings from localStorage')
@@ -75,10 +81,10 @@ export function useAppState() {
     }))
   }, [])
 
-  const setPitch = useCallback((pitch: PitchLevel) => {
+  const setPitch = useCallback((pitch: number) => {
     setState(prev => ({
       ...prev,
-      settings: { ...prev.settings, pitch }
+      settings: { ...prev.settings, pitch: Math.max(0.5, Math.min(2.0, pitch)) }
     }))
   }, [])
 

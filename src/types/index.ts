@@ -2,7 +2,6 @@ export type PlayerType = 'parent' | 'child'
 
 export type ScoreType = 'ron' | 'tsumo'
 
-export type PitchLevel = 'low' | 'normal' | 'high'
 
 export interface ScoreEntry {
   id: string
@@ -34,7 +33,7 @@ export interface HonbaAdjustedScore {
 export interface Settings {
   volume: number
   playbackSpeed: number
-  pitch: PitchLevel
+  pitch: number
 }
 
 export interface AppState {

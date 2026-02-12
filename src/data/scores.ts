@@ -55,17 +55,17 @@ export const scoreTable: ScoreEntry[] = [
   { id: '3-50', han: 3, fu: 50, label: '3翻50符', isRare: true,
     parentRon: 9600, parentTsumoAll: 3200,
     childRon: 6400, childTsumoParent: 3200, childTsumoChild: 1600 },
-  { id: '3-60', han: 3, fu: 60, label: '3翻60符', isMangan: true,
-    parentRon: 12000, parentTsumoAll: 4000,
-    childRon: 8000, childTsumoParent: 4000, childTsumoChild: 2000 },
+  { id: '3-60', han: 3, fu: 60, label: '3翻60符',
+    parentRon: 11600, parentTsumoAll: 3900,
+    childRon: 7700, childTsumoParent: 3900, childTsumoChild: 2000 },
 
   // ===== 4 Han =====
   { id: '4-25', han: 4, fu: 25, label: '4翻25符',
     parentRon: 9600, parentTsumoAll: 3200,
     childRon: 6400, childTsumoParent: 3200, childTsumoChild: 1600 },
-  { id: '4-30', han: 4, fu: 30, label: '4翻30符', isMangan: true,
-    parentRon: 12000, parentTsumoAll: 4000,
-    childRon: 8000, childTsumoParent: 4000, childTsumoChild: 2000 },
+  { id: '4-30', han: 4, fu: 30, label: '4翻30符',
+    parentRon: 11600, parentTsumoAll: 3900,
+    childRon: 7700, childTsumoParent: 3900, childTsumoChild: 2000 },
   { id: '4-40', han: 4, fu: 40, label: '4翻40符', isMangan: true,
     parentRon: 12000, parentTsumoAll: 4000,
     childRon: 8000, childTsumoParent: 4000, childTsumoChild: 2000 },
@@ -192,6 +192,30 @@ export function numberToJapanese(num: number): string {
   return result
 }
 
+// Generate base announcement text for TTS (honba = 0, used as offline fallback)
+export function generateBaseAnnouncementText(
+  score: ScoreEntry,
+  playerType: 'parent' | 'child',
+  type: 'ron' | 'tsumo'
+): string {
+  if (type === 'ron') {
+    const amount = playerType === 'parent' ? score.parentRon : score.childRon
+    if (!amount) return ''
+    return `${amount}`
+  } else {
+    if (playerType === 'parent') {
+      const amount = score.parentTsumoAll
+      if (!amount) return ''
+      return `${amount}オール`
+    } else {
+      const childPay = score.childTsumoChild
+      const parentPay = score.childTsumoParent
+      if (!childPay || !parentPay) return ''
+      return `${childPay}、${parentPay}`
+    }
+  }
+}
+
 // Generate announcement text for TTS when honba > 0
 // Format: "base わ、adjusted" (は is written as わ to ensure "wa" pronunciation)
 export function generateAnnouncementText(
@@ -204,20 +228,20 @@ export function generateAnnouncementText(
     const base = playerType === 'parent' ? baseScore.parentRon : baseScore.childRon
     const adjusted = playerType === 'parent' ? adjustedScore.parentRon : adjustedScore.childRon
     if (!base || !adjusted) return ''
-    return `${numberToJapanese(base)}わ、${numberToJapanese(adjusted)}`
+    return `${base}は、${adjusted}`
   } else {
     if (playerType === 'parent') {
       const base = baseScore.parentTsumoAll
       const adjusted = adjustedScore.parentTsumoAll
       if (!base || !adjusted) return ''
-      return `${numberToJapanese(base)}わ、${numberToJapanese(adjusted)}オール`
+      return `${base}は、${adjusted}オール`
     } else {
       const baseChild = baseScore.childTsumoChild
       const baseParent = baseScore.childTsumoParent
       const adjChild = adjustedScore.childTsumoChild
       const adjParent = adjustedScore.childTsumoParent
       if (!baseChild || !baseParent || !adjChild || !adjParent) return ''
-      return `${numberToJapanese(baseChild)}、${numberToJapanese(baseParent)}わ、${numberToJapanese(adjChild)}、${numberToJapanese(adjParent)}`
+      return `${baseChild}、${baseParent}は、${adjChild}、${adjParent}`
     }
   }
 }
