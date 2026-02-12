@@ -16,6 +16,7 @@ const defaultState: AppState = {
   settings: defaultSettings,
   isSettingsOpen: false,
   isManualInputOpen: false,
+  isGuideOpen: false,
 }
 
 function loadSettings(): Settings {
@@ -104,6 +105,14 @@ export function useAppState() {
     setState(prev => ({ ...prev, isManualInputOpen: false }))
   }, [])
 
+  const toggleGuide = useCallback(() => {
+    setState(prev => ({ ...prev, isGuideOpen: !prev.isGuideOpen }))
+  }, [])
+
+  const closeGuide = useCallback(() => {
+    setState(prev => ({ ...prev, isGuideOpen: false }))
+  }, [])
+
   return {
     state,
     setPlayerType,
@@ -116,5 +125,7 @@ export function useAppState() {
     closeSettings,
     toggleManualInput,
     closeManualInput,
+    toggleGuide,
+    closeGuide,
   }
 }

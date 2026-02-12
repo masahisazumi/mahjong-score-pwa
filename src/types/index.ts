@@ -43,4 +43,5 @@ export interface AppState {
   settings: Settings
   isSettingsOpen: boolean
   isManualInputOpen: boolean
+  isGuideOpen: boolean
 }

@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react'
-import { ModeSelector, ScoreGridOptimized, SettingsPanel, ManualInput } from './components'
+import { ModeSelector, ScoreGridOptimized, SettingsPanel, ManualInput, GuidePanel } from './components'
 import { useAppState } from './hooks/useAppState'
 import { useAudioPlayer, getAudioUrl } from './hooks/useAudioPlayer'
 import { getBaseScoreById, generateAnnouncementText, generateBaseAnnouncementText } from './data/scores'
@@ -18,6 +18,8 @@ const App: React.FC = () => {
     closeSettings,
     toggleManualInput,
     closeManualInput,
+    toggleGuide,
+    closeGuide,
   } = useAppState()
 
   const { playAudio } = useAudioPlayer(state.settings)
@@ -67,6 +69,7 @@ const App: React.FC = () => {
         onRareToggle={toggleRare}
         onSettingsClick={toggleSettings}
         onManualInputClick={toggleManualInput}
+        onGuideClick={toggleGuide}
       />
 
       {/* Current Mode Indicator */}
@@ -120,6 +123,12 @@ const App: React.FC = () => {
         isOpen={state.isManualInputOpen}
         onClose={closeManualInput}
         onPlayScore={handleManualScore}
+      />
+
+      {/* Guide Panel */}
+      <GuidePanel
+        isOpen={state.isGuideOpen}
+        onClose={closeGuide}
       />
 
       {/* Offline Indicator */}

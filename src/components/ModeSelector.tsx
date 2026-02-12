@@ -10,6 +10,7 @@ interface ModeSelectorProps {
   onRareToggle: () => void
   onSettingsClick: () => void
   onManualInputClick: () => void
+  onGuideClick: () => void
 }
 
 export const ModeSelector: React.FC<ModeSelectorProps> = ({
@@ -21,6 +22,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
   onRareToggle,
   onSettingsClick,
   onManualInputClick,
+  onGuideClick,
 }) => {
   return (
     <div className="flex items-center justify-between gap-4 px-6 py-4 bg-surface-light border-b border-white/10">
@@ -153,6 +155,27 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
             />
           </svg>
           <span>手入力</span>
+        </button>
+
+        {/* Guide Button */}
+        <button
+          onClick={onGuideClick}
+          className="p-3 rounded-xl bg-surface border border-white/10 text-white/60 hover:text-white hover:bg-surface-lighter transition-all"
+          aria-label="使い方"
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
         </button>
 
         {/* Settings Button */}
