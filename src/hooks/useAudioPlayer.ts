@@ -40,10 +40,14 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
   return cachedJapaneseVoice
 }
 
-// --- Web Audio API singleton ---
+// --- Shared audio pipeline (singleton) ---
+// HTMLAudioElement handles fetch/decode reliably.
+// AudioContext routes output to bypass iOS silent switch.
 let audioCtx: AudioContext | null = null
+let sharedAudio: HTMLAudioElement | null = null
+let mediaSourceConnected = false
 
-function getAudioContext(): AudioContext {
+function getOrCreateAudioContext(): AudioContext {
   if (!audioCtx) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext
     audioCtx = new AudioCtx()
@@ -51,19 +55,26 @@ function getAudioContext(): AudioContext {
   return audioCtx
 }
 
-// Ensure AudioContext is running (handles iOS suspend after backgrounding)
-function ensureAudioContextRunning(): void {
-  const ctx = getAudioContext()
-  if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
-    ctx.resume()
+function getSharedAudio(): HTMLAudioElement {
+  if (!sharedAudio) {
+    sharedAudio = new Audio()
   }
+  // Connect to AudioContext if not yet connected
+  if (!mediaSourceConnected) {
+    try {
+      const ctx = getOrCreateAudioContext()
+      const source = ctx.createMediaElementSource(sharedAudio)
+      source.connect(ctx.destination)
+      mediaSourceConnected = true
+    } catch {
+      // createMediaElementSource may fail if already connected (HMR)
+      // Audio will still play through default output
+    }
+  }
+  return sharedAudio
 }
 
-// Decoded audio buffer cache (avoids re-fetching & re-decoding)
-const bufferCache = new Map<string, AudioBuffer>()
-
 export function useAudioPlayer(settings: Settings) {
-  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
@@ -83,18 +94,17 @@ export function useAudioPlayer(settings: Settings) {
     let unlocked = false
     const unlock = () => {
       if (unlocked) return
-      const ctx = getAudioContext()
+      const ctx = getOrCreateAudioContext()
       if (ctx.state === 'suspended') {
         ctx.resume()
       }
-      // Play a silent buffer to fully unlock iOS audio session
+      // Play silent buffer to fully unlock iOS audio session
       const buf = ctx.createBuffer(1, 1, 22050)
       const src = ctx.createBufferSource()
       src.buffer = buf
       src.connect(ctx.destination)
       src.start(0)
       unlocked = true
-      // Remove listeners after successful unlock
       document.removeEventListener('touchstart', unlock, true)
       document.removeEventListener('touchend', unlock, true)
       document.removeEventListener('mousedown', unlock, true)
@@ -109,107 +119,76 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [])
 
-  // Stop currently playing AudioBufferSourceNode
-  const stopCurrentSource = useCallback(() => {
-    if (currentSourceRef.current) {
-      try { currentSourceRef.current.stop() } catch { /* already stopped */ }
-      currentSourceRef.current = null
-    }
-  }, [])
-
   // Speak Japanese text using SpeechSynthesis
   const speakText = useCallback((text: string) => {
     const synth = window.speechSynthesis
     if (!synth) return
 
-    stopCurrentSource()
+    // Stop current audio
+    const audio = getSharedAudio()
+    audio.pause()
+    audio.currentTime = 0
     synth.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ja-JP'
     utterance.volume = settingsRef.current.volume
-
-    // Pitch: use numeric value directly (0.5 - 2.0)
     utterance.pitch = settingsRef.current.pitch
-    // Rate: user speed × base TTS rate for brisk announcements
     utterance.rate = settingsRef.current.playbackSpeed * TTS_BASE_RATE
 
     const voice = findJapaneseVoice()
     if (voice) utterance.voice = voice
 
     synth.speak(utterance)
-  }, [stopCurrentSource])
+  }, [])
 
-  // Play audio file via Web Audio API with TTS fallback
+  // Play audio file: HTMLAudioElement routed through AudioContext
   const playAudio = useCallback((url: string, fallbackText?: string) => {
-    // Stop any current playback
-    stopCurrentSource()
+    const audio = getSharedAudio()
+
+    // Stop current playback
+    audio.pause()
+    audio.currentTime = 0
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
 
-    const ctx = getAudioContext()
-    // Resume if suspended (e.g. after app was backgrounded on iOS)
-    ensureAudioContextRunning()
+    // Resume AudioContext if suspended (iOS background return)
+    const ctx = getOrCreateAudioContext()
+    if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
+      ctx.resume()
+    }
 
-    const playBuffer = (buffer: AudioBuffer) => {
-      const source = ctx.createBufferSource()
-      source.buffer = buffer
+    // Configure playback
+    audio.volume = settingsRef.current.volume
+    const rate = settingsRef.current.playbackSpeed * settingsRef.current.pitch
+    audio.playbackRate = rate
 
-      // Playback rate (also shifts pitch since we want pitch change)
-      source.playbackRate.value = settingsRef.current.playbackSpeed * settingsRef.current.pitch
+    // Disable preservesPitch so playbackRate also shifts pitch
+    const a = audio as any
+    if ('preservesPitch' in audio) a.preservesPitch = false
+    if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
+    if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
 
-      // Volume via GainNode
-      const gain = ctx.createGain()
-      gain.gain.value = settingsRef.current.volume
-
-      source.connect(gain)
-      gain.connect(ctx.destination)
-
-      source.onended = () => {
-        if (currentSourceRef.current === source) {
-          currentSourceRef.current = null
-        }
+    // Set source and play (synchronous from user gesture)
+    audio.src = url
+    audio.play().catch(err => {
+      console.error('Audio play failed:', err)
+      if (fallbackText) {
+        speakText(fallbackText)
       }
-
-      currentSourceRef.current = source
-      source.start(0)
-    }
-
-    // Use cached buffer if available
-    const cached = bufferCache.get(url)
-    if (cached) {
-      playBuffer(cached)
-      return
-    }
-
-    // Fetch audio data (from Service Worker cache when offline) and decode
-    fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.arrayBuffer()
-      })
-      .then(arrayBuffer => ctx.decodeAudioData(arrayBuffer))
-      .then(audioBuffer => {
-        bufferCache.set(url, audioBuffer)
-        playBuffer(audioBuffer)
-      })
-      .catch(err => {
-        console.error('Web Audio playback failed:', err)
-        // Fallback to TTS when audio fetch/decode fails
-        if (fallbackText) {
-          speakText(fallbackText)
-        }
-      })
-  }, [speakText, stopCurrentSource])
+    })
+  }, [speakText])
 
   // Stop currently playing audio and speech
   const stopAudio = useCallback(() => {
-    stopCurrentSource()
+    const audio = getSharedAudio()
+    audio.pause()
+    audio.currentTime = 0
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
-  }, [stopCurrentSource])
+  }, [])
 
   return {
     playAudio,
