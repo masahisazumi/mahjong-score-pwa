@@ -21,6 +21,12 @@ export const scoreTable: ScoreEntry[] = [
   { id: '1-70', han: 1, fu: 70, label: '1翻70符', isRare: true,
     parentRon: 3400, parentTsumoAll: 1200,
     childRon: 2300, childTsumoParent: 1200, childTsumoChild: 600 },
+  { id: '1-90', han: 1, fu: 90, label: '1翻90符', isRare: true,
+    parentRon: 4400, parentTsumoAll: 1500,
+    childRon: 2900, childTsumoParent: 1500, childTsumoChild: 800 },
+  { id: '1-100', han: 1, fu: 100, label: '1翻100符', isRare: true,
+    parentRon: 4800, parentTsumoAll: 1600,
+    childRon: 3200, childTsumoParent: 1600, childTsumoChild: 800 },
 
   // ===== 2 Han =====
   { id: '2-25', han: 2, fu: 25, label: '2翻25符',
@@ -41,6 +47,15 @@ export const scoreTable: ScoreEntry[] = [
   { id: '2-70', han: 2, fu: 70, label: '2翻70符', isRare: true,
     parentRon: 6800, parentTsumoAll: 2300,
     childRon: 4500, childTsumoParent: 2300, childTsumoChild: 1200 },
+  { id: '2-90', han: 2, fu: 90, label: '2翻90符', isRare: true,
+    parentRon: 8700, parentTsumoAll: 2900,
+    childRon: 5800, childTsumoParent: 2900, childTsumoChild: 1500 },
+  { id: '2-100', han: 2, fu: 100, label: '2翻100符', isRare: true,
+    parentRon: 9600, parentTsumoAll: 3200,
+    childRon: 6400, childTsumoParent: 3200, childTsumoChild: 1600 },
+  { id: '2-110', han: 2, fu: 110, label: '2翻110符', isRare: true,
+    parentRon: 10600, parentTsumoAll: 3600,
+    childRon: 7100, childTsumoParent: 3600, childTsumoChild: 1800 },
 
   // ===== 3 Han =====
   { id: '3-25', han: 3, fu: 25, label: '3翻25符',

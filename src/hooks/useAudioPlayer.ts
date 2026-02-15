@@ -40,12 +40,14 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
   return cachedJapaneseVoice
 }
 
-// --- Shared audio pipeline (singleton) ---
-// HTMLAudioElement handles fetch/decode reliably.
-// AudioContext routes output to bypass iOS silent switch.
+// --- Audio pipeline ---
+// HTMLAudioElement for reliable playback on all devices.
+// AudioContext used ONLY for iOS autoplay unlock (silent buffer on first gesture).
+// NOTE: createMediaElementSource is intentionally NOT used.
+// Routing HTMLAudioElement through AudioContext causes silent failures on iPad
+// when AudioContext is suspended — audio is dropped with no error.
 let audioCtx: AudioContext | null = null
 let sharedAudio: HTMLAudioElement | null = null
-let mediaSourceConnected = false
 
 function getOrCreateAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -58,18 +60,6 @@ function getOrCreateAudioContext(): AudioContext {
 function getSharedAudio(): HTMLAudioElement {
   if (!sharedAudio) {
     sharedAudio = new Audio()
-  }
-  // Connect to AudioContext if not yet connected
-  if (!mediaSourceConnected) {
-    try {
-      const ctx = getOrCreateAudioContext()
-      const source = ctx.createMediaElementSource(sharedAudio)
-      source.connect(ctx.destination)
-      mediaSourceConnected = true
-    } catch {
-      // createMediaElementSource may fail if already connected (HMR)
-      // Audio will still play through default output
-    }
   }
   return sharedAudio
 }
@@ -90,6 +80,7 @@ export function useAudioPlayer(settings: Settings) {
   }, [])
 
   // Unlock AudioContext on first user gesture (required for iOS)
+  // This activates the audio session so HTMLAudioElement playback works reliably.
   useEffect(() => {
     let unlocked = false
     const unlock = () => {
@@ -104,6 +95,19 @@ export function useAudioPlayer(settings: Settings) {
       src.buffer = buf
       src.connect(ctx.destination)
       src.start(0)
+
+      // Also prime the HTMLAudioElement with a silent play
+      // This ensures iOS allows subsequent play() calls
+      const audio = getSharedAudio()
+      audio.muted = true
+      audio.play().then(() => {
+        audio.pause()
+        audio.muted = false
+        audio.currentTime = 0
+      }).catch(() => {
+        audio.muted = false
+      })
+
       unlocked = true
       document.removeEventListener('touchstart', unlock, true)
       document.removeEventListener('touchend', unlock, true)
@@ -142,7 +146,7 @@ export function useAudioPlayer(settings: Settings) {
     synth.speak(utterance)
   }, [])
 
-  // Play audio file: HTMLAudioElement routed through AudioContext
+  // Play audio file via HTMLAudioElement (direct output, no AudioContext routing)
   const playAudio = useCallback((url: string, fallbackText?: string) => {
     const audio = getSharedAudio()
 
@@ -153,7 +157,7 @@ export function useAudioPlayer(settings: Settings) {
       window.speechSynthesis.cancel()
     }
 
-    // Resume AudioContext if suspended (iOS background return)
+    // Keep AudioContext alive to maintain iOS audio session
     const ctx = getOrCreateAudioContext()
     if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
       ctx.resume()
