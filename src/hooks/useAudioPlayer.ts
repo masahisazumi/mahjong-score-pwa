@@ -40,31 +40,8 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
   return cachedJapaneseVoice
 }
 
-// --- Audio pipeline ---
-// HTMLAudioElement for reliable playback on all devices.
-// AudioContext used ONLY for iOS autoplay unlock (silent buffer on first gesture).
-// NOTE: createMediaElementSource is intentionally NOT used.
-// Routing HTMLAudioElement through AudioContext causes silent failures on iPad
-// when AudioContext is suspended — audio is dropped with no error.
-let audioCtx: AudioContext | null = null
-let sharedAudio: HTMLAudioElement | null = null
-
-function getOrCreateAudioContext(): AudioContext {
-  if (!audioCtx) {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext
-    audioCtx = new AudioCtx()
-  }
-  return audioCtx
-}
-
-function getSharedAudio(): HTMLAudioElement {
-  if (!sharedAudio) {
-    sharedAudio = new Audio()
-  }
-  return sharedAudio
-}
-
 export function useAudioPlayer(settings: Settings) {
+  const currentAudio = useRef<HTMLAudioElement | null>(null)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
@@ -79,59 +56,17 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [])
 
-  // Unlock AudioContext on first user gesture (required for iOS)
-  // This activates the audio session so HTMLAudioElement playback works reliably.
-  useEffect(() => {
-    let unlocked = false
-    const unlock = () => {
-      if (unlocked) return
-      const ctx = getOrCreateAudioContext()
-      if (ctx.state === 'suspended') {
-        ctx.resume()
-      }
-      // Play silent buffer to fully unlock iOS audio session
-      const buf = ctx.createBuffer(1, 1, 22050)
-      const src = ctx.createBufferSource()
-      src.buffer = buf
-      src.connect(ctx.destination)
-      src.start(0)
-
-      // Also prime the HTMLAudioElement with a silent play
-      // This ensures iOS allows subsequent play() calls
-      const audio = getSharedAudio()
-      audio.muted = true
-      audio.play().then(() => {
-        audio.pause()
-        audio.muted = false
-        audio.currentTime = 0
-      }).catch(() => {
-        audio.muted = false
-      })
-
-      unlocked = true
-      document.removeEventListener('touchstart', unlock, true)
-      document.removeEventListener('touchend', unlock, true)
-      document.removeEventListener('mousedown', unlock, true)
-    }
-    document.addEventListener('touchstart', unlock, true)
-    document.addEventListener('touchend', unlock, true)
-    document.addEventListener('mousedown', unlock, true)
-    return () => {
-      document.removeEventListener('touchstart', unlock, true)
-      document.removeEventListener('touchend', unlock, true)
-      document.removeEventListener('mousedown', unlock, true)
-    }
-  }, [])
-
   // Speak Japanese text using SpeechSynthesis
   const speakText = useCallback((text: string) => {
     const synth = window.speechSynthesis
     if (!synth) return
 
-    // Stop current audio
-    const audio = getSharedAudio()
-    audio.pause()
-    audio.currentTime = 0
+    // Stop any current audio/speech
+    if (currentAudio.current) {
+      currentAudio.current.pause()
+      currentAudio.current.currentTime = 0
+      currentAudio.current = null
+    }
     synth.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
@@ -146,49 +81,55 @@ export function useAudioPlayer(settings: Settings) {
     synth.speak(utterance)
   }, [])
 
-  // Play audio file via HTMLAudioElement (direct output, no AudioContext routing)
+  // Play audio file with TTS fallback for offline
   const playAudio = useCallback((url: string, fallbackText?: string) => {
-    const audio = getSharedAudio()
-
-    // Stop current playback
-    audio.pause()
-    audio.currentTime = 0
+    // Stop any currently playing audio/speech
+    if (currentAudio.current) {
+      currentAudio.current.pause()
+      currentAudio.current.currentTime = 0
+      currentAudio.current = null
+    }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
 
-    // Keep AudioContext alive to maintain iOS audio session
-    const ctx = getOrCreateAudioContext()
-    if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
-      ctx.resume()
-    }
-
-    // Configure playback
+    const audio = new Audio(url)
     audio.volume = settingsRef.current.volume
+    // For HTML5 Audio: pitch is simulated via playbackRate (higher = faster + higher pitch)
     const rate = settingsRef.current.playbackSpeed * settingsRef.current.pitch
     audio.playbackRate = rate
 
-    // Disable preservesPitch so playbackRate also shifts pitch
+    // Disable preservesPitch so playbackRate also changes pitch
     const a = audio as any
-    if ('preservesPitch' in audio) a.preservesPitch = false
+    if ('preservesPitch' in audio) (audio as any).preservesPitch = false
     if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
     if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
 
-    // Set source and play (synchronous from user gesture)
-    audio.src = url
+    currentAudio.current = audio
+
+    // play() returns a promise - must be called synchronously from user gesture
     audio.play().catch(err => {
       console.error('Audio play failed:', err)
+      // Fallback to TTS when audio fails (e.g. offline without cache)
       if (fallbackText) {
         speakText(fallbackText)
       }
     })
+
+    audio.onended = () => {
+      if (currentAudio.current === audio) {
+        currentAudio.current = null
+      }
+    }
   }, [speakText])
 
   // Stop currently playing audio and speech
   const stopAudio = useCallback(() => {
-    const audio = getSharedAudio()
-    audio.pause()
-    audio.currentTime = 0
+    if (currentAudio.current) {
+      currentAudio.current.pause()
+      currentAudio.current.currentTime = 0
+      currentAudio.current = null
+    }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }

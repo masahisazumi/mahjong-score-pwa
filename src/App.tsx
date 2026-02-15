@@ -98,6 +98,7 @@ const App: React.FC = () => {
             <span className="text-pink-400 text-sm">レア表示中</span>
           </>
         )}
+        <span className="ml-auto text-white/20 text-xs">v2.1</span>
       </div>
 
       {/* Score Grid - Optimized for iPad Landscape */}
