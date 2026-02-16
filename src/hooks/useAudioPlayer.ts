@@ -46,6 +46,7 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
 // so we use ignoreSearch:true to match regardless of revision params.
 async function fetchAudioBlob(url: string): Promise<Blob> {
   // 1. Try Cache API directly (bypasses SW fetch handler, works offline)
+  // ignoreSearch: true to match Workbox precache keys with ?__WB_REVISION__=xxx
   try {
     const cached = await caches.match(url, { ignoreSearch: true })
     if (cached) {
@@ -55,7 +56,23 @@ async function fetchAudioBlob(url: string): Promise<Blob> {
     // caches API not available or error — fall through
   }
 
-  // 2. Fallback to fetch (goes through SW or network)
+  // 2. Try searching each cache manually (fallback if ignoreSearch doesn't work)
+  try {
+    const cacheNames = await caches.keys()
+    for (const name of cacheNames) {
+      const cache = await caches.open(name)
+      const keys = await cache.keys()
+      const match = keys.find(req => req.url.includes(url) || req.url.endsWith(url.replace(/^\//, '')))
+      if (match) {
+        const resp = await cache.match(match)
+        if (resp) return await resp.blob()
+      }
+    }
+  } catch {
+    // fall through
+  }
+
+  // 3. Fallback to fetch (goes through SW or network)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.blob()

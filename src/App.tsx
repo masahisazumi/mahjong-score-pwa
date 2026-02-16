@@ -98,7 +98,8 @@ const App: React.FC = () => {
             <span className="text-pink-400 text-sm">レア表示中</span>
           </>
         )}
-        <span className="ml-auto text-white/20 text-xs">v2.3</span>
+        <span className="ml-auto text-white/20 text-xs">v2.4</span>
+        <CacheDiag />
       </div>
 
       {/* Score Grid - Optimized for iPad Landscape */}
@@ -136,6 +137,42 @@ const App: React.FC = () => {
       <OfflineIndicator />
     </div>
   )
+}
+
+// Cache diagnostic — temporary debug display
+const CacheDiag: React.FC = () => {
+  const [info, setInfo] = React.useState('...')
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const testUrl = '/audio/parent_ron_1-30.mp3'
+        const names = await caches.keys()
+
+        // Try caches.match with ignoreSearch
+        const matched = await caches.match(testUrl, { ignoreSearch: true })
+
+        // Also try searching each cache manually
+        let found = ''
+        for (const name of names) {
+          const cache = await caches.open(name)
+          const keys = await cache.keys()
+          const mp3Count = keys.filter(k => k.url.includes('.mp3')).length
+          if (mp3Count > 0) {
+            found += `${name.slice(0, 20)}:${mp3Count} `
+          }
+        }
+
+        setInfo(
+          `match:${matched ? 'OK' : 'MISS'} caches:[${found.trim()}]`
+        )
+      } catch (e) {
+        setInfo(`err:${e}`)
+      }
+    })()
+  }, [])
+
+  return <span className="text-yellow-400/80 text-xs ml-2 truncate max-w-[60vw]">{info}</span>
 }
 
 // Offline status indicator
