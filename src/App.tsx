@@ -2,6 +2,7 @@ import React, { useCallback } from 'react'
 import { ModeSelector, ScoreGridOptimized, SettingsPanel, ManualInput, GuidePanel } from './components'
 import { useAppState } from './hooks/useAppState'
 import { useAudioPlayer, getAudioUrl } from './hooks/useAudioPlayer'
+import { useAudioCache } from './hooks/useAudioCache'
 import { getBaseScoreById, generateAnnouncementText, generateBaseAnnouncementText } from './data/scores'
 import { ScoreEntry } from './types'
 
@@ -23,6 +24,7 @@ const App: React.FC = () => {
   } = useAppState()
 
   const { playAudio } = useAudioPlayer(state.settings)
+  const cacheStatus = useAudioCache()
 
   // Handle score button press - always use pre-generated MP3 with TTS fallback
   const handleScorePress = useCallback((score: ScoreEntry, type: 'ron' | 'tsumo') => {
@@ -98,8 +100,7 @@ const App: React.FC = () => {
             <span className="text-pink-400 text-sm">レア表示中</span>
           </>
         )}
-        <span className="ml-auto text-white/20 text-xs">v2.4</span>
-        <CacheDiag />
+        <span className="ml-auto text-white/20 text-xs">v3.0</span>
       </div>
 
       {/* Score Grid - Optimized for iPad Landscape */}
@@ -133,46 +134,36 @@ const App: React.FC = () => {
         onClose={closeGuide}
       />
 
+      {/* Audio Cache Download Progress */}
+      <AudioCacheIndicator status={cacheStatus} />
+
       {/* Offline Indicator */}
       <OfflineIndicator />
     </div>
   )
 }
 
-// Cache diagnostic — temporary debug display
-const CacheDiag: React.FC = () => {
-  const [info, setInfo] = React.useState('...')
+// Audio cache download progress indicator
+const AudioCacheIndicator: React.FC<{ status: ReturnType<typeof useAudioCache> }> = ({ status }) => {
+  if (status.state === 'done') return null
+  if (status.state === 'checking') return null
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const testUrl = '/audio/parent_ron_1-30.mp3'
-        const names = await caches.keys()
+  const pct = status.total > 0 ? Math.round((status.cached / status.total) * 100) : 0
 
-        // Try caches.match with ignoreSearch
-        const matched = await caches.match(testUrl, { ignoreSearch: true })
+  if (status.state === 'error') {
+    return (
+      <div className="fixed bottom-14 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-full text-sm font-medium shadow-lg z-50">
+        音声キャッシュ失敗
+      </div>
+    )
+  }
 
-        // Also try searching each cache manually
-        let found = ''
-        for (const name of names) {
-          const cache = await caches.open(name)
-          const keys = await cache.keys()
-          const mp3Count = keys.filter(k => k.url.includes('.mp3')).length
-          if (mp3Count > 0) {
-            found += `${name.slice(0, 20)}:${mp3Count} `
-          }
-        }
-
-        setInfo(
-          `match:${matched ? 'OK' : 'MISS'} caches:[${found.trim()}]`
-        )
-      } catch (e) {
-        setInfo(`err:${e}`)
-      }
-    })()
-  }, [])
-
-  return <span className="text-yellow-400/80 text-xs ml-2 truncate max-w-[60vw]">{info}</span>
+  return (
+    <div className="fixed bottom-14 left-1/2 -translate-x-1/2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium shadow-lg z-50 flex items-center gap-3">
+      <span>音声DL中 {pct}%</span>
+      <span className="text-blue-200 text-xs">({status.cached}/{status.total})</span>
+    </div>
+  )
 }
 
 // Offline status indicator

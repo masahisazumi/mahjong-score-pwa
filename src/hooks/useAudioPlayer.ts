@@ -40,39 +40,22 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
   return cachedJapaneseVoice
 }
 
-// Fetch audio as Blob, trying Cache API directly first (offline-safe),
-// then falling back to fetch() (online / SW-handled).
-// Workbox precache stores entries with ?__WB_REVISION__=xxx query params,
-// so we use ignoreSearch:true to match regardless of revision params.
+const AUDIO_CACHE_NAME = 'audio-cache'
+
+// Fetch audio as Blob: try cache first (offline), then network
 async function fetchAudioBlob(url: string): Promise<Blob> {
-  // 1. Try Cache API directly (bypasses SW fetch handler, works offline)
-  // ignoreSearch: true to match Workbox precache keys with ?__WB_REVISION__=xxx
+  // 1. Try our audio-cache directly (works offline, clean URLs)
   try {
-    const cached = await caches.match(url, { ignoreSearch: true })
+    const cache = await caches.open(AUDIO_CACHE_NAME)
+    const cached = await cache.match(url)
     if (cached) {
       return await cached.blob()
-    }
-  } catch {
-    // caches API not available or error — fall through
-  }
-
-  // 2. Try searching each cache manually (fallback if ignoreSearch doesn't work)
-  try {
-    const cacheNames = await caches.keys()
-    for (const name of cacheNames) {
-      const cache = await caches.open(name)
-      const keys = await cache.keys()
-      const match = keys.find(req => req.url.includes(url) || req.url.endsWith(url.replace(/^\//, '')))
-      if (match) {
-        const resp = await cache.match(match)
-        if (resp) return await resp.blob()
-      }
     }
   } catch {
     // fall through
   }
 
-  // 3. Fallback to fetch (goes through SW or network)
+  // 2. Fallback to fetch (network, also goes through SW CacheFirst handler)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.blob()
@@ -129,7 +112,7 @@ export function useAudioPlayer(settings: Settings) {
     synth.speak(utterance)
   }, [stopCurrent])
 
-  // Play audio file: Cache API → Blob URL → HTMLAudioElement
+  // Play audio file: Cache → Blob URL → HTMLAudioElement
   const playAudio = useCallback((url: string, fallbackText?: string) => {
     stopCurrent()
     if (window.speechSynthesis) {
