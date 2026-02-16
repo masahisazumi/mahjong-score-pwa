@@ -42,6 +42,8 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
 
 export function useAudioPlayer(settings: Settings) {
   const currentAudio = useRef<HTMLAudioElement | null>(null)
+  const currentBlobUrl = useRef<string | null>(null)
+  const playIdRef = useRef(0)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
@@ -56,17 +58,25 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [])
 
-  // Speak Japanese text using SpeechSynthesis
-  const speakText = useCallback((text: string) => {
-    const synth = window.speechSynthesis
-    if (!synth) return
-
-    // Stop any current audio/speech
+  // Clean up current playback and blob URL
+  const stopCurrent = useCallback(() => {
     if (currentAudio.current) {
       currentAudio.current.pause()
       currentAudio.current.currentTime = 0
       currentAudio.current = null
     }
+    if (currentBlobUrl.current) {
+      URL.revokeObjectURL(currentBlobUrl.current)
+      currentBlobUrl.current = null
+    }
+  }, [])
+
+  // Speak Japanese text using SpeechSynthesis
+  const speakText = useCallback((text: string) => {
+    const synth = window.speechSynthesis
+    if (!synth) return
+
+    stopCurrent()
     synth.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
@@ -79,61 +89,73 @@ export function useAudioPlayer(settings: Settings) {
     if (voice) utterance.voice = voice
 
     synth.speak(utterance)
-  }, [])
+  }, [stopCurrent])
 
-  // Play audio file with TTS fallback for offline
+  // Play audio file via fetch + Blob URL (bypasses iOS range request issues with SW cache)
   const playAudio = useCallback((url: string, fallbackText?: string) => {
-    // Stop any currently playing audio/speech
-    if (currentAudio.current) {
-      currentAudio.current.pause()
-      currentAudio.current.currentTime = 0
-      currentAudio.current = null
-    }
+    stopCurrent()
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
 
-    const audio = new Audio(url)
-    audio.volume = settingsRef.current.volume
-    // For HTML5 Audio: pitch is simulated via playbackRate (higher = faster + higher pitch)
-    const rate = settingsRef.current.playbackSpeed * settingsRef.current.pitch
-    audio.playbackRate = rate
+    // Track play ID to handle rapid button presses (ignore stale fetches)
+    const thisPlayId = ++playIdRef.current
 
-    // Disable preservesPitch so playbackRate also changes pitch
-    const a = audio as any
-    if ('preservesPitch' in audio) (audio as any).preservesPitch = false
-    if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
-    if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
+    // Fetch audio data from Service Worker cache, then play via Blob URL.
+    // This avoids the iOS Safari issue where HTMLAudioElement sends Range requests
+    // that the SW precache handler cannot properly respond to (returns 200 instead of 206).
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.blob()
+      })
+      .then(blob => {
+        // Ignore if a newer play was triggered while fetching
+        if (thisPlayId !== playIdRef.current) return
 
-    currentAudio.current = audio
+        const blobUrl = URL.createObjectURL(blob)
+        currentBlobUrl.current = blobUrl
 
-    // play() returns a promise - must be called synchronously from user gesture
-    audio.play().catch(err => {
-      console.error('Audio play failed:', err)
-      // Fallback to TTS when audio fails (e.g. offline without cache)
-      if (fallbackText) {
-        speakText(fallbackText)
-      }
-    })
+        const audio = new Audio(blobUrl)
+        audio.volume = settingsRef.current.volume
+        const rate = settingsRef.current.playbackSpeed * settingsRef.current.pitch
+        audio.playbackRate = rate
 
-    audio.onended = () => {
-      if (currentAudio.current === audio) {
-        currentAudio.current = null
-      }
-    }
-  }, [speakText])
+        // Disable preservesPitch so playbackRate also changes pitch
+        const a = audio as any
+        if ('preservesPitch' in audio) a.preservesPitch = false
+        if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
+        if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
+
+        currentAudio.current = audio
+
+        audio.onended = () => {
+          if (currentAudio.current === audio) {
+            currentAudio.current = null
+          }
+          URL.revokeObjectURL(blobUrl)
+          if (currentBlobUrl.current === blobUrl) {
+            currentBlobUrl.current = null
+          }
+        }
+
+        return audio.play()
+      })
+      .catch(err => {
+        console.error('Audio play failed:', err)
+        if (thisPlayId === playIdRef.current && fallbackText) {
+          speakText(fallbackText)
+        }
+      })
+  }, [speakText, stopCurrent])
 
   // Stop currently playing audio and speech
   const stopAudio = useCallback(() => {
-    if (currentAudio.current) {
-      currentAudio.current.pause()
-      currentAudio.current.currentTime = 0
-      currentAudio.current = null
-    }
+    stopCurrent()
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
-  }, [])
+  }, [stopCurrent])
 
   return {
     playAudio,
