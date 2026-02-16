@@ -40,6 +40,27 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
   return cachedJapaneseVoice
 }
 
+// Fetch audio as Blob, trying Cache API directly first (offline-safe),
+// then falling back to fetch() (online / SW-handled).
+// Workbox precache stores entries with ?__WB_REVISION__=xxx query params,
+// so we use ignoreSearch:true to match regardless of revision params.
+async function fetchAudioBlob(url: string): Promise<Blob> {
+  // 1. Try Cache API directly (bypasses SW fetch handler, works offline)
+  try {
+    const cached = await caches.match(url, { ignoreSearch: true })
+    if (cached) {
+      return await cached.blob()
+    }
+  } catch {
+    // caches API not available or error — fall through
+  }
+
+  // 2. Fallback to fetch (goes through SW or network)
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.blob()
+}
+
 export function useAudioPlayer(settings: Settings) {
   const currentAudio = useRef<HTMLAudioElement | null>(null)
   const currentBlobUrl = useRef<string | null>(null)
@@ -91,7 +112,7 @@ export function useAudioPlayer(settings: Settings) {
     synth.speak(utterance)
   }, [stopCurrent])
 
-  // Play audio file via fetch + Blob URL (bypasses iOS range request issues with SW cache)
+  // Play audio file: Cache API → Blob URL → HTMLAudioElement
   const playAudio = useCallback((url: string, fallbackText?: string) => {
     stopCurrent()
     if (window.speechSynthesis) {
@@ -101,14 +122,7 @@ export function useAudioPlayer(settings: Settings) {
     // Track play ID to handle rapid button presses (ignore stale fetches)
     const thisPlayId = ++playIdRef.current
 
-    // Fetch audio data from Service Worker cache, then play via Blob URL.
-    // This avoids the iOS Safari issue where HTMLAudioElement sends Range requests
-    // that the SW precache handler cannot properly respond to (returns 200 instead of 206).
-    fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.blob()
-      })
+    fetchAudioBlob(url)
       .then(blob => {
         // Ignore if a newer play was triggered while fetching
         if (thisPlayId !== playIdRef.current) return
