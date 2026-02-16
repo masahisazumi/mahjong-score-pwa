@@ -1,8 +1,9 @@
 import React, { useCallback } from 'react'
-import { ModeSelector, ScoreGridOptimized, SettingsPanel, ManualInput } from './components'
+import { ModeSelector, ScoreGridOptimized, SettingsPanel, ManualInput, GuidePanel } from './components'
 import { useAppState } from './hooks/useAppState'
 import { useAudioPlayer, getAudioUrl } from './hooks/useAudioPlayer'
-import { getBaseScoreById, generateAnnouncementText } from './data/scores'
+import { useAudioCache } from './hooks/useAudioCache'
+import { getBaseScoreById, generateAnnouncementText, generateBaseAnnouncementText } from './data/scores'
 import { ScoreEntry } from './types'
 
 const App: React.FC = () => {
@@ -18,31 +19,34 @@ const App: React.FC = () => {
     closeSettings,
     toggleManualInput,
     closeManualInput,
+    toggleGuide,
+    closeGuide,
   } = useAppState()
 
-  const { playAudio, speakText } = useAudioPlayer(state.settings)
+  const { playAudio } = useAudioPlayer(state.settings)
+  const cacheStatus = useAudioCache()
 
-  // Handle score button press
+  // Handle score button press - always use pre-generated MP3 with TTS fallback
   const handleScorePress = useCallback((score: ScoreEntry, type: 'ron' | 'tsumo') => {
+    const audioUrl = getAudioUrl(score.id, type === 'ron', state.playerType === 'parent', state.honba)
+
+    // Generate TTS fallback text for offline
+    let fallbackText: string
     if (state.honba > 0) {
-      // Honba > 0: Use TTS to announce "base は adjusted" format
       const baseScore = getBaseScoreById(score.id)
-      if (baseScore) {
-        const text = generateAnnouncementText(baseScore, score, state.playerType, type)
-        if (text) {
-          speakText(text)
-        }
-      }
+      fallbackText = baseScore
+        ? generateAnnouncementText(baseScore, score, state.playerType, type)
+        : ''
     } else {
-      // Honba 0: Play pre-generated audio file
-      const audioUrl = getAudioUrl(score.id, type === 'ron', state.playerType === 'parent')
-      playAudio(audioUrl)
+      fallbackText = generateBaseAnnouncementText(score, state.playerType, type)
     }
+
+    playAudio(audioUrl, fallbackText)
 
     if (navigator.vibrate) {
       navigator.vibrate(50)
     }
-  }, [state.playerType, state.honba, playAudio, speakText])
+  }, [state.playerType, state.honba, playAudio])
 
   // Handle manual input score
   const handleManualScore = useCallback((score: number) => {
@@ -67,6 +71,7 @@ const App: React.FC = () => {
         onRareToggle={toggleRare}
         onSettingsClick={toggleSettings}
         onManualInputClick={toggleManualInput}
+        onGuideClick={toggleGuide}
       />
 
       {/* Current Mode Indicator */}
@@ -95,6 +100,7 @@ const App: React.FC = () => {
             <span className="text-pink-400 text-sm">レア表示中</span>
           </>
         )}
+        <span className="ml-auto text-white/20 text-xs">v3.0</span>
       </div>
 
       {/* Score Grid - Optimized for iPad Landscape */}
@@ -122,8 +128,40 @@ const App: React.FC = () => {
         onPlayScore={handleManualScore}
       />
 
+      {/* Guide Panel */}
+      <GuidePanel
+        isOpen={state.isGuideOpen}
+        onClose={closeGuide}
+      />
+
+      {/* Audio Cache Download Progress */}
+      <AudioCacheIndicator status={cacheStatus} />
+
       {/* Offline Indicator */}
       <OfflineIndicator />
+    </div>
+  )
+}
+
+// Audio cache download progress indicator
+const AudioCacheIndicator: React.FC<{ status: ReturnType<typeof useAudioCache> }> = ({ status }) => {
+  if (status.state === 'done') return null
+  if (status.state === 'checking') return null
+
+  const pct = status.total > 0 ? Math.round((status.cached / status.total) * 100) : 0
+
+  if (status.state === 'error') {
+    return (
+      <div className="fixed bottom-14 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-full text-sm font-medium shadow-lg z-50">
+        音声キャッシュ失敗
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed bottom-14 left-1/2 -translate-x-1/2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium shadow-lg z-50 flex items-center gap-3">
+      <span>音声DL中 {pct}%</span>
+      <span className="text-blue-200 text-xs">({status.cached}/{status.total})</span>
     </div>
   )
 }

@@ -1,12 +1,9 @@
 import { useRef, useCallback, useEffect } from 'react'
-import { Settings, PitchLevel } from '../types'
+import { Settings } from '../types'
 
-// Pitch shift multipliers
-const pitchMultipliers: Record<PitchLevel, number> = {
-  low: 0.85,
-  normal: 1.0,
-  high: 1.15,
-}
+// Base TTS rate: SpeechSynthesis default 1.0 is too slow for mahjong score announcements.
+// Pre-recorded MP3s are spoken at a brisk pace, so TTS base rate needs to be higher to match.
+const TTS_BASE_RATE = 1.4
 
 // Cached Japanese voice for SpeechSynthesis
 let cachedJapaneseVoice: SpeechSynthesisVoice | null = null
@@ -43,8 +40,31 @@ function findJapaneseVoice(): SpeechSynthesisVoice | null {
   return cachedJapaneseVoice
 }
 
+const AUDIO_CACHE_NAME = 'audio-cache'
+
+// Fetch audio as Blob: try cache first (offline), then network
+async function fetchAudioBlob(url: string): Promise<Blob> {
+  // 1. Try our audio-cache directly (works offline, clean URLs)
+  try {
+    const cache = await caches.open(AUDIO_CACHE_NAME)
+    const cached = await cache.match(url)
+    if (cached) {
+      return await cached.blob()
+    }
+  } catch {
+    // fall through
+  }
+
+  // 2. Fallback to fetch (network, also goes through SW CacheFirst handler)
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.blob()
+}
+
 export function useAudioPlayer(settings: Settings) {
   const currentAudio = useRef<HTMLAudioElement | null>(null)
+  const currentBlobUrl = useRef<string | null>(null)
+  const playIdRef = useRef(0)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
@@ -59,80 +79,97 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [])
 
-  // Play audio file using HTML5 Audio (reliable on iOS/Android)
-  const playAudio = useCallback((url: string) => {
-    // Stop any currently playing audio/speech
+  // Clean up current playback and blob URL
+  const stopCurrent = useCallback(() => {
     if (currentAudio.current) {
       currentAudio.current.pause()
       currentAudio.current.currentTime = 0
       currentAudio.current = null
     }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
-
-    const audio = new Audio(url)
-    audio.volume = settingsRef.current.volume
-    const rate = settingsRef.current.playbackSpeed * pitchMultipliers[settingsRef.current.pitch]
-    audio.playbackRate = rate
-
-    // Disable preservesPitch so playbackRate also changes pitch
-    // (matches the previous Web Audio API behavior)
-    const a = audio as any
-    if ('preservesPitch' in audio) (audio as any).preservesPitch = false
-    if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
-    if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
-
-    currentAudio.current = audio
-
-    // play() returns a promise - must be called synchronously from user gesture
-    audio.play().catch(err => {
-      console.error('Audio play failed:', err)
-    })
-
-    audio.onended = () => {
-      if (currentAudio.current === audio) {
-        currentAudio.current = null
-      }
+    if (currentBlobUrl.current) {
+      URL.revokeObjectURL(currentBlobUrl.current)
+      currentBlobUrl.current = null
     }
   }, [])
 
-  // Speak Japanese text using SpeechSynthesis (for honba announcements)
+  // Speak Japanese text using SpeechSynthesis
   const speakText = useCallback((text: string) => {
     const synth = window.speechSynthesis
     if (!synth) return
 
-    // Stop any current audio/speech
-    if (currentAudio.current) {
-      currentAudio.current.pause()
-      currentAudio.current.currentTime = 0
-      currentAudio.current = null
-    }
+    stopCurrent()
     synth.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'ja-JP'
-    utterance.rate = settingsRef.current.playbackSpeed
     utterance.volume = settingsRef.current.volume
-    utterance.pitch = pitchMultipliers[settingsRef.current.pitch]
+    utterance.pitch = settingsRef.current.pitch
+    utterance.rate = settingsRef.current.playbackSpeed * TTS_BASE_RATE
 
     const voice = findJapaneseVoice()
     if (voice) utterance.voice = voice
 
     synth.speak(utterance)
-  }, [])
+  }, [stopCurrent])
 
-  // Stop currently playing audio and speech
-  const stopAudio = useCallback(() => {
-    if (currentAudio.current) {
-      currentAudio.current.pause()
-      currentAudio.current.currentTime = 0
-      currentAudio.current = null
-    }
+  // Play audio file: Cache → Blob URL → HTMLAudioElement
+  const playAudio = useCallback((url: string, fallbackText?: string) => {
+    stopCurrent()
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
-  }, [])
+
+    // Track play ID to handle rapid button presses (ignore stale fetches)
+    const thisPlayId = ++playIdRef.current
+
+    fetchAudioBlob(url)
+      .then(blob => {
+        // Ignore if a newer play was triggered while fetching
+        if (thisPlayId !== playIdRef.current) return
+
+        const blobUrl = URL.createObjectURL(blob)
+        currentBlobUrl.current = blobUrl
+
+        const audio = new Audio(blobUrl)
+        audio.volume = settingsRef.current.volume
+        const rate = settingsRef.current.playbackSpeed * settingsRef.current.pitch
+        audio.playbackRate = rate
+
+        // Disable preservesPitch so playbackRate also changes pitch
+        const a = audio as any
+        if ('preservesPitch' in audio) a.preservesPitch = false
+        if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
+        if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
+
+        currentAudio.current = audio
+
+        audio.onended = () => {
+          if (currentAudio.current === audio) {
+            currentAudio.current = null
+          }
+          URL.revokeObjectURL(blobUrl)
+          if (currentBlobUrl.current === blobUrl) {
+            currentBlobUrl.current = null
+          }
+        }
+
+        return audio.play()
+      })
+      .catch(err => {
+        console.error('Audio play failed:', err)
+        if (thisPlayId === playIdRef.current && fallbackText) {
+          speakText(fallbackText)
+        }
+      })
+  }, [speakText, stopCurrent])
+
+  // Stop currently playing audio and speech
+  const stopAudio = useCallback(() => {
+    stopCurrent()
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+  }, [stopCurrent])
 
   return {
     playAudio,
@@ -141,9 +178,10 @@ export function useAudioPlayer(settings: Settings) {
   }
 }
 
-// Generate audio URL based on score
-export function getAudioUrl(scoreId: string, isRon: boolean, isParent: boolean): string {
+// Generate audio URL based on score and honba
+export function getAudioUrl(scoreId: string, isRon: boolean, isParent: boolean, honba: number = 0): string {
   const type = isRon ? 'ron' : 'tsumo'
   const player = isParent ? 'parent' : 'child'
-  return `/audio/${player}_${type}_${scoreId}.mp3`
+  const honbaSuffix = honba > 0 ? `_h${honba}` : ''
+  return `/audio/${player}_${type}_${scoreId}${honbaSuffix}.mp3`
 }

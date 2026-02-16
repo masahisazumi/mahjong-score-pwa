@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'audio/**/*'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: '麻雀点数申告',
         short_name: '点数申告',
@@ -36,7 +36,11 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,wav}'],
+        // NOTE: mp3/wav are intentionally excluded from precache.
+        // iOS has a ~30s timeout for SW install, and precaching 1100+ audio files (25MB)
+        // exceeds this limit, causing ALL audio to be uncached.
+        // Audio files are cached via client-side Cache API after app load instead.
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
             urlPattern: /\.(?:mp3|wav)$/,
@@ -44,7 +48,7 @@ export default defineConfig({
             options: {
               cacheName: 'audio-cache',
               expiration: {
-                maxEntries: 100,
+                maxEntries: 1200,
                 maxAgeSeconds: 60 * 60 * 24 * 365
               }
             }

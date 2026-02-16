@@ -1,5 +1,5 @@
 import React from 'react'
-import { Settings, PitchLevel } from '../types'
+import { Settings } from '../types'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -7,7 +7,7 @@ interface SettingsPanelProps {
   onClose: () => void
   onVolumeChange: (volume: number) => void
   onSpeedChange: (speed: number) => void
-  onPitchChange: (pitch: PitchLevel) => void
+  onPitchChange: (pitch: number) => void
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -19,12 +19,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onPitchChange,
 }) => {
   if (!isOpen) return null
-
-  const pitchOptions: { value: PitchLevel; label: string }[] = [
-    { value: 'low', label: '低' },
-    { value: 'normal', label: '標準' },
-    { value: 'high', label: '高' },
-  ]
 
   return (
     <>
@@ -150,19 +144,38 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {/* Pitch Control */}
           <div className="space-y-4">
-            <label className="text-lg font-medium text-white">声の高さ</label>
+            <div className="flex items-center justify-between">
+              <label className="text-lg font-medium text-white">声の高さ</label>
+              <span className="text-white/60 text-sm">
+                {settings.pitch.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-white/40 text-xs">低い</span>
+              <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.05"
+                value={settings.pitch}
+                onChange={(e) => onPitchChange(parseFloat(e.target.value))}
+                className="settings-slider flex-1"
+              />
+              <span className="text-white/40 text-xs">高い</span>
+            </div>
+            {/* Pitch Preset Buttons */}
             <div className="flex gap-2">
-              {pitchOptions.map(option => (
+              {[0.75, 1.0, 1.25, 1.5].map(pitch => (
                 <button
-                  key={option.value}
-                  onClick={() => onPitchChange(option.value)}
-                  className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${
-                    settings.pitch === option.value
-                      ? 'bg-primary-600 text-white shadow-glow'
-                      : 'bg-surface text-white/60 hover:bg-surface-lighter border border-white/10'
+                  key={pitch}
+                  onClick={() => onPitchChange(pitch)}
+                  className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+                    settings.pitch === pitch
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-surface text-white/60 hover:bg-surface-lighter'
                   }`}
                 >
-                  {option.label}
+                  {pitch === 0.75 ? '低' : pitch === 1.0 ? '標準' : pitch === 1.25 ? 'やや高' : '高'}
                 </button>
               ))}
             </div>
