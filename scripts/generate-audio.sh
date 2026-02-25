@@ -27,11 +27,13 @@ echo "🎵 麻雀点数音声ファイル生成開始"
 echo "出力先: $AUDIO_DIR"
 echo ""
 
-# 数字をTTS用テキストに変換（400のみイントネーション補正）
+# 数字をTTS用テキストに変換（sayコマンドのイントネーション補正）
 format_number() {
   local num=$1
   case "$num" in
     400) echo "よんひゃく" ;;
+    2000) echo "にせん" ;;
+    18000) echo "いちまん、はっせん" ;;
     *) echo "$num" ;;
   esac
 }
@@ -100,7 +102,7 @@ for score_data in "${SCORES[@]}"; do
   generate_audio "$f_child_ron" "$AUDIO_DIR/child_ron_${id}.mp3"
 
   count=$((count + 1))
-  text="${f_parent_tsumo_all}オール"
+  text="${f_parent_tsumo_all}、オール"
   echo "[$count/$total] parent_tsumo_${id}.mp3 - $text"
   generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}.mp3"
 
@@ -140,7 +142,7 @@ for score_data in "${SCORES[@]}"; do
 
     # 親ツモ: "base は adjusted オール"
     count=$((count + 1))
-    text="${f_parent_tsumo_all}は、${f_adj_parent_tsumo_all}オール"
+    text="${f_parent_tsumo_all}は、${f_adj_parent_tsumo_all}、オール"
     echo "[$count/$total] parent_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}_h${h}.mp3"
 

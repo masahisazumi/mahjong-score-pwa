@@ -62,11 +62,29 @@ async function fetchAudioBlob(url: string): Promise<Blob> {
 }
 
 export function useAudioPlayer(settings: Settings) {
-  const currentAudio = useRef<HTMLAudioElement | null>(null)
+  // Single persistent Audio element to avoid reverb from multiple concurrent elements
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const currentBlobUrl = useRef<string | null>(null)
   const playIdRef = useRef(0)
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+
+  // Create persistent Audio element once
+  useEffect(() => {
+    audioRef.current = new Audio()
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.removeAttribute('src')
+        audioRef.current.load()
+        audioRef.current = null
+      }
+      if (currentBlobUrl.current) {
+        URL.revokeObjectURL(currentBlobUrl.current)
+        currentBlobUrl.current = null
+      }
+    }
+  }, [])
 
   // Pre-load SpeechSynthesis voices (async on many browsers)
   useEffect(() => {
@@ -79,12 +97,11 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [])
 
-  // Clean up current playback and blob URL
+  // Stop current playback and revoke blob URL
   const stopCurrent = useCallback(() => {
-    if (currentAudio.current) {
-      currentAudio.current.pause()
-      currentAudio.current.currentTime = 0
-      currentAudio.current = null
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
     }
     if (currentBlobUrl.current) {
       URL.revokeObjectURL(currentBlobUrl.current)
@@ -112,7 +129,7 @@ export function useAudioPlayer(settings: Settings) {
     synth.speak(utterance)
   }, [stopCurrent])
 
-  // Play audio file: Cache → Blob URL → HTMLAudioElement
+  // Play audio file: Cache → Blob URL → single persistent HTMLAudioElement
   const playAudio = useCallback((url: string, fallbackText?: string) => {
     stopCurrent()
     if (window.speechSynthesis) {
@@ -126,11 +143,17 @@ export function useAudioPlayer(settings: Settings) {
       .then(blob => {
         // Ignore if a newer play was triggered while fetching
         if (thisPlayId !== playIdRef.current) return
+        if (!audioRef.current) return
 
         const blobUrl = URL.createObjectURL(blob)
+        // Revoke previous blob URL if still held
+        if (currentBlobUrl.current) {
+          URL.revokeObjectURL(currentBlobUrl.current)
+        }
         currentBlobUrl.current = blobUrl
 
-        const audio = new Audio(blobUrl)
+        const audio = audioRef.current
+        audio.src = blobUrl
         audio.volume = settingsRef.current.volume
         const rate = settingsRef.current.playbackSpeed * settingsRef.current.pitch
         audio.playbackRate = rate
@@ -141,14 +164,9 @@ export function useAudioPlayer(settings: Settings) {
         if ('mozPreservesPitch' in a) a.mozPreservesPitch = false
         if ('webkitPreservesPitch' in a) a.webkitPreservesPitch = false
 
-        currentAudio.current = audio
-
         audio.onended = () => {
-          if (currentAudio.current === audio) {
-            currentAudio.current = null
-          }
-          URL.revokeObjectURL(blobUrl)
           if (currentBlobUrl.current === blobUrl) {
+            URL.revokeObjectURL(blobUrl)
             currentBlobUrl.current = null
           }
         }
