@@ -27,8 +27,24 @@ echo "🎵 麻雀点数音声ファイル生成開始"
 echo "出力先: $AUDIO_DIR"
 echo ""
 
+# 百の位の400補正（sayが数字「400」を不自然に読むため）
+fix_400() {
+  local num=$1
+  local hundreds=$((num % 1000))
+  if [ "$hundreds" -eq 400 ]; then
+    local above=$((num - hundreds))
+    if [ "$above" -gt 0 ]; then
+      echo "${above}よんひゃく"
+    else
+      echo "よんひゃく"
+    fi
+  else
+    echo "$num"
+  fi
+}
+
 # 数字をTTS用テキストに変換
-# - 万未満: 数字のまま（sayの自然な読みに任せる）
+# - 万未満: 数字のまま（sayの自然な読み）+ 400のみひらがな補正
 # - 万以上: ひらがな万 + [[slnc 150]] + 残りを数字
 #   （万と千の食い気味防止 + 11600等の「いっせん」→「せん」自動修正）
 format_number() {
@@ -50,12 +66,13 @@ format_number() {
       9) man_reading="きゅうまん" ;;
     esac
     if [ "$rest" -gt 0 ]; then
-      echo "${man_reading}[[slnc 150]]${rest}"
+      local formatted_rest=$(fix_400 "$rest")
+      echo "${man_reading}[[slnc 150]]${formatted_rest}"
     else
       echo "${man_reading}"
     fi
   else
-    echo "$num"
+    fix_400 "$num"
   fi
 }
 
