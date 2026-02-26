@@ -97,11 +97,14 @@ export function useAudioPlayer(settings: Settings) {
     }
   }, [])
 
-  // Stop current playback and revoke blob URL
+  // Stop current playback and fully release audio resources
   const stopCurrent = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
+      // Force browser to release audio buffer by clearing src
+      audioRef.current.removeAttribute('src')
+      audioRef.current.load()
     }
     if (currentBlobUrl.current) {
       URL.revokeObjectURL(currentBlobUrl.current)
@@ -175,7 +178,8 @@ export function useAudioPlayer(settings: Settings) {
       })
       .catch(err => {
         console.error('Audio play failed:', err)
-        if (thisPlayId === playIdRef.current && fallbackText) {
+        // Only fall back to TTS if audio truly isn't playing (avoid double sound)
+        if (thisPlayId === playIdRef.current && fallbackText && audioRef.current?.paused !== false) {
           speakText(fallbackText)
         }
       })

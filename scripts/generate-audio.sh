@@ -27,15 +27,69 @@ echo "🎵 麻雀点数音声ファイル生成開始"
 echo "出力先: $AUDIO_DIR"
 echo ""
 
-# 数字をTTS用テキストに変換（sayコマンドのイントネーション補正）
+# 数字を全てひらがなに変換（sayコマンドの発声を完全制御）
+# - 千の位1は「せん」（「いっせん」ではなく）
+# - 万と千の間に [[slnc 150]] で間を確保
 format_number() {
   local num=$1
-  case "$num" in
-    400) echo "よんひゃく" ;;
-    2000) echo "にせん" ;;
-    18000) echo "いちまん、はっせん" ;;
-    *) echo "$num" ;;
-  esac
+  local result=""
+  local remaining=$num
+
+  # 万の位 (10000s)
+  local man=$((remaining / 10000))
+  if [ $man -gt 0 ]; then
+    case $man in
+      1) result="いちまん" ;;
+      2) result="にまん" ;;
+      3) result="さんまん" ;;
+      4) result="よんまん" ;;
+      5) result="ごまん" ;;
+      6) result="ろくまん" ;;
+      7) result="ななまん" ;;
+      8) result="はちまん" ;;
+      9) result="きゅうまん" ;;
+    esac
+    remaining=$((remaining % 10000))
+    # 万の後に千が続く場合は間を入れる（食い気味防止）
+    if [ $((remaining / 1000)) -gt 0 ]; then
+      result="${result}[[slnc 150]]"
+    fi
+  fi
+
+  # 千の位 (1000s)
+  local sen=$((remaining / 1000))
+  if [ $sen -gt 0 ]; then
+    case $sen in
+      1) result="${result}せん" ;;
+      2) result="${result}にせん" ;;
+      3) result="${result}さんぜん" ;;
+      4) result="${result}よんせん" ;;
+      5) result="${result}ごせん" ;;
+      6) result="${result}ろくせん" ;;
+      7) result="${result}ななせん" ;;
+      8) result="${result}はっせん" ;;
+      9) result="${result}きゅうせん" ;;
+    esac
+    remaining=$((remaining % 1000))
+  fi
+
+  # 百の位 (100s)
+  local hyaku=$((remaining / 100))
+  if [ $hyaku -gt 0 ]; then
+    case $hyaku in
+      1) result="${result}ひゃく" ;;
+      2) result="${result}にひゃく" ;;
+      3) result="${result}さんびゃく" ;;
+      4) result="${result}よんひゃく" ;;
+      5) result="${result}ごひゃく" ;;
+      6) result="${result}ろっぴゃく" ;;
+      7) result="${result}ななひゃく" ;;
+      8) result="${result}はっぴゃく" ;;
+      9) result="${result}きゅうひゃく" ;;
+    esac
+  fi
+
+  echo "$result"
 }
 
 # 音声ファイル生成関数
@@ -85,7 +139,7 @@ count=0
 for score_data in "${SCORES[@]}"; do
   read -r id parent_ron child_ron parent_tsumo_all child_tsumo_parent child_tsumo_child <<< "$score_data"
 
-  # format_number で百の位のみの数字を「N百」形式に変換
+  # 全数値をひらがなに変換
   f_parent_ron=$(format_number "$parent_ron")
   f_child_ron=$(format_number "$child_ron")
   f_parent_tsumo_all=$(format_number "$parent_tsumo_all")
@@ -128,27 +182,27 @@ for score_data in "${SCORES[@]}"; do
     f_adj_child_tsumo_parent=$(format_number "$adj_child_tsumo_parent")
     f_adj_child_tsumo_child=$(format_number "$adj_child_tsumo_child")
 
-    # 親ロン: "base は adjusted"
+    # 親ロン: "base は adjusted" （は の前に間を確保）
     count=$((count + 1))
-    text="${f_parent_ron}は、${f_adj_parent_ron}"
+    text="${f_parent_ron}[[slnc 100]]は、${f_adj_parent_ron}"
     echo "[$count/$total] parent_ron_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_ron_${id}_h${h}.mp3"
 
     # 子ロン: "base は adjusted"
     count=$((count + 1))
-    text="${f_child_ron}は、${f_adj_child_ron}"
+    text="${f_child_ron}[[slnc 100]]は、${f_adj_child_ron}"
     echo "[$count/$total] child_ron_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/child_ron_${id}_h${h}.mp3"
 
     # 親ツモ: "base は adjusted オール"
     count=$((count + 1))
-    text="${f_parent_tsumo_all}は、${f_adj_parent_tsumo_all}、オール"
+    text="${f_parent_tsumo_all}[[slnc 100]]は、${f_adj_parent_tsumo_all}、オール"
     echo "[$count/$total] parent_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}_h${h}.mp3"
 
     # 子ツモ: "childBase、parentBase は childAdj、parentAdj"
     count=$((count + 1))
-    text="${f_child_tsumo_child}、${f_child_tsumo_parent}は、${f_adj_child_tsumo_child}、${f_adj_child_tsumo_parent}"
+    text="${f_child_tsumo_child}、${f_child_tsumo_parent}[[slnc 100]]は、${f_adj_child_tsumo_child}、${f_adj_child_tsumo_parent}"
     echo "[$count/$total] child_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/child_tsumo_${id}_h${h}.mp3"
   done
