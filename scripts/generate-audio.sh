@@ -28,63 +28,34 @@ echo "出力先: $AUDIO_DIR"
 echo ""
 
 # 数字をTTS用テキストに変換
-# - 万・千はひらがな（イントネーション制御）
-# - 百は数字のまま（sayの自然な発声に任せる）
-# - 千の位1は「せん」（「いっせん」ではなく）
-# - 万と千の間に [[slnc 150]] で間を確保
+# - 万未満: 数字のまま（sayの自然な読みに任せる）
+# - 万以上: ひらがな万 + [[slnc 150]] + 残りを数字
+#   （万と千の食い気味防止 + 11600等の「いっせん」→「せん」自動修正）
 format_number() {
   local num=$1
-  local result=""
-  local remaining=$num
 
-  # 万の位 (10000s) → ひらがな
-  local man=$((remaining / 10000))
-  if [ $man -gt 0 ]; then
+  if [ "$num" -ge 10000 ]; then
+    local man=$((num / 10000))
+    local rest=$((num % 10000))
+    local man_reading=""
     case $man in
-      1) result="いちまん" ;;
-      2) result="にまん" ;;
-      3) result="さんまん" ;;
-      4) result="よんまん" ;;
-      5) result="ごまん" ;;
-      6) result="ろくまん" ;;
-      7) result="ななまん" ;;
-      8) result="はちまん" ;;
-      9) result="きゅうまん" ;;
+      1) man_reading="いちまん" ;;
+      2) man_reading="にまん" ;;
+      3) man_reading="さんまん" ;;
+      4) man_reading="よんまん" ;;
+      5) man_reading="ごまん" ;;
+      6) man_reading="ろくまん" ;;
+      7) man_reading="ななまん" ;;
+      8) man_reading="はちまん" ;;
+      9) man_reading="きゅうまん" ;;
     esac
-    remaining=$((remaining % 10000))
-    # 万の後に千が続く場合は間を入れる（食い気味防止）
-    if [ $((remaining / 1000)) -gt 0 ]; then
-      result="${result}[[slnc 150]]"
+    if [ "$rest" -gt 0 ]; then
+      echo "${man_reading}[[slnc 150]]${rest}"
+    else
+      echo "${man_reading}"
     fi
-  fi
-
-  # 千の位 (1000s) → ひらがな
-  local sen=$((remaining / 1000))
-  if [ $sen -gt 0 ]; then
-    case $sen in
-      1) result="${result}せん" ;;
-      2) result="${result}にせん" ;;
-      3) result="${result}さんぜん" ;;
-      4) result="${result}よんせん" ;;
-      5) result="${result}ごせん" ;;
-      6) result="${result}ろくせん" ;;
-      7) result="${result}ななせん" ;;
-      8) result="${result}はっせん" ;;
-      9) result="${result}きゅうせん" ;;
-    esac
-    remaining=$((remaining % 1000))
-  fi
-
-  # 百の位 (100s) → 数字のまま（sayの自然な読みに任せる）
-  if [ $remaining -gt 0 ]; then
-    result="${result}${remaining}"
-  fi
-
-  # 千以上がない場合（百のみ）は数字そのまま
-  if [ -z "$result" ]; then
-    echo "$num"
   else
-    echo "$result"
+    echo "$num"
   fi
 }
 
