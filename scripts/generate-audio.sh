@@ -27,7 +27,9 @@ echo "🎵 麻雀点数音声ファイル生成開始"
 echo "出力先: $AUDIO_DIR"
 echo ""
 
-# 数字を全てひらがなに変換（sayコマンドの発声を完全制御）
+# 数字をTTS用テキストに変換
+# - 万・千はひらがな（イントネーション制御）
+# - 百は数字のまま（sayの自然な発声に任せる）
 # - 千の位1は「せん」（「いっせん」ではなく）
 # - 万と千の間に [[slnc 150]] で間を確保
 format_number() {
@@ -35,7 +37,7 @@ format_number() {
   local result=""
   local remaining=$num
 
-  # 万の位 (10000s)
+  # 万の位 (10000s) → ひらがな
   local man=$((remaining / 10000))
   if [ $man -gt 0 ]; then
     case $man in
@@ -56,7 +58,7 @@ format_number() {
     fi
   fi
 
-  # 千の位 (1000s)
+  # 千の位 (1000s) → ひらがな
   local sen=$((remaining / 1000))
   if [ $sen -gt 0 ]; then
     case $sen in
@@ -73,23 +75,17 @@ format_number() {
     remaining=$((remaining % 1000))
   fi
 
-  # 百の位 (100s)
-  local hyaku=$((remaining / 100))
-  if [ $hyaku -gt 0 ]; then
-    case $hyaku in
-      1) result="${result}ひゃく" ;;
-      2) result="${result}にひゃく" ;;
-      3) result="${result}さんびゃく" ;;
-      4) result="${result}よんひゃく" ;;
-      5) result="${result}ごひゃく" ;;
-      6) result="${result}ろっぴゃく" ;;
-      7) result="${result}ななひゃく" ;;
-      8) result="${result}はっぴゃく" ;;
-      9) result="${result}きゅうひゃく" ;;
-    esac
+  # 百の位 (100s) → 数字のまま（sayの自然な読みに任せる）
+  if [ $remaining -gt 0 ]; then
+    result="${result}${remaining}"
   fi
 
-  echo "$result"
+  # 千以上がない場合（百のみ）は数字そのまま
+  if [ -z "$result" ]; then
+    echo "$num"
+  else
+    echo "$result"
+  fi
 }
 
 # 音声ファイル生成関数
