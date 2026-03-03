@@ -140,7 +140,7 @@ for score_data in "${SCORES[@]}"; do
   generate_audio "$f_child_ron" "$AUDIO_DIR/child_ron_${id}.mp3"
 
   count=$((count + 1))
-  text="${f_parent_tsumo_all}[[slnc 60]]オール"
+  text="${f_parent_tsumo_all}オール"
   echo "[$count/$total] parent_tsumo_${id}.mp3 - $text"
   generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}.mp3"
 
@@ -180,7 +180,7 @@ for score_data in "${SCORES[@]}"; do
 
     # 親ツモ: "base は adjusted オール"
     count=$((count + 1))
-    text="${f_parent_tsumo_all}[[slnc 100]]は、${f_adj_parent_tsumo_all}[[slnc 60]]オール"
+    text="${f_parent_tsumo_all}[[slnc 100]]は、${f_adj_parent_tsumo_all}オール"
     echo "[$count/$total] parent_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}_h${h}.mp3"
 
