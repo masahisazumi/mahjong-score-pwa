@@ -45,8 +45,8 @@ fix_400() {
 
 # 数字をTTS用テキストに変換
 # - 万未満: 数字のまま（sayの自然な読み）+ 400のみひらがな補正
-# - 万以上: ひらがな万 + [[slnc 150]] + 残りを数字
-#   （万と千の食い気味防止 + 11600等の「いっせん」→「せん」自動修正）
+# - 万以上: ひらがな万 + [[slnc 50]] + 残りを数字
+#   （万と千を自然につなげつつ 11600等の「いっせん」→「せん」自動修正）
 format_number() {
   local num=$1
 
@@ -67,7 +67,7 @@ format_number() {
     esac
     if [ "$rest" -gt 0 ]; then
       local formatted_rest=$(fix_400 "$rest")
-      echo "${man_reading}[[slnc 150]]${formatted_rest}"
+      echo "${man_reading}[[slnc 50]]${formatted_rest}"
     else
       echo "${man_reading}"
     fi
@@ -140,7 +140,7 @@ for score_data in "${SCORES[@]}"; do
   generate_audio "$f_child_ron" "$AUDIO_DIR/child_ron_${id}.mp3"
 
   count=$((count + 1))
-  text="${f_parent_tsumo_all}、オール"
+  text="${f_parent_tsumo_all}[[slnc 60]]オール"
   echo "[$count/$total] parent_tsumo_${id}.mp3 - $text"
   generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}.mp3"
 
@@ -180,7 +180,7 @@ for score_data in "${SCORES[@]}"; do
 
     # 親ツモ: "base は adjusted オール"
     count=$((count + 1))
-    text="${f_parent_tsumo_all}[[slnc 100]]は、${f_adj_parent_tsumo_all}、オール"
+    text="${f_parent_tsumo_all}[[slnc 100]]は、${f_adj_parent_tsumo_all}[[slnc 60]]オール"
     echo "[$count/$total] parent_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}_h${h}.mp3"
 
