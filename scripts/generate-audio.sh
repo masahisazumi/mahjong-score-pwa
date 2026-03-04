@@ -27,13 +27,53 @@ echo "🎵 麻雀点数音声ファイル生成開始"
 echo "出力先: $AUDIO_DIR"
 echo ""
 
-# 数字をTTS用テキストに変換（400のみイントネーション補正）
+# 百の位の400補正（sayが数字「400」を不自然に読むため）
+fix_400() {
+  local num=$1
+  local hundreds=$((num % 1000))
+  if [ "$hundreds" -eq 400 ]; then
+    local above=$((num - hundreds))
+    if [ "$above" -gt 0 ]; then
+      echo "${above}よんひゃく"
+    else
+      echo "よんひゃく"
+    fi
+  else
+    echo "$num"
+  fi
+}
+
+# 数字をTTS用テキストに変換
+# - 万未満: 数字のまま（sayの自然な読み）+ 400のみひらがな補正
+# - 万以上: ひらがな万 + [[slnc 50]] + 残りを数字
+#   （万と千を自然につなげつつ 11600等の「いっせん」→「せん」自動修正）
 format_number() {
   local num=$1
-  case "$num" in
-    400) echo "よんひゃく" ;;
-    *) echo "$num" ;;
-  esac
+
+  if [ "$num" -ge 10000 ]; then
+    local man=$((num / 10000))
+    local rest=$((num % 10000))
+    local man_reading=""
+    case $man in
+      1) man_reading="いちまん" ;;
+      2) man_reading="にまん" ;;
+      3) man_reading="さんまん" ;;
+      4) man_reading="よんまん" ;;
+      5) man_reading="ごまん" ;;
+      6) man_reading="ろくまん" ;;
+      7) man_reading="ななまん" ;;
+      8) man_reading="はちまん" ;;
+      9) man_reading="きゅうまん" ;;
+    esac
+    if [ "$rest" -gt 0 ]; then
+      local formatted_rest=$(fix_400 "$rest")
+      echo "${man_reading}[[slnc 50]]${formatted_rest}"
+    else
+      echo "${man_reading}"
+    fi
+  else
+    fix_400 "$num"
+  fi
 }
 
 # 音声ファイル生成関数
@@ -83,7 +123,7 @@ count=0
 for score_data in "${SCORES[@]}"; do
   read -r id parent_ron child_ron parent_tsumo_all child_tsumo_parent child_tsumo_child <<< "$score_data"
 
-  # format_number で百の位のみの数字を「N百」形式に変換
+  # 全数値をひらがなに変換
   f_parent_ron=$(format_number "$parent_ron")
   f_child_ron=$(format_number "$child_ron")
   f_parent_tsumo_all=$(format_number "$parent_tsumo_all")
@@ -126,27 +166,27 @@ for score_data in "${SCORES[@]}"; do
     f_adj_child_tsumo_parent=$(format_number "$adj_child_tsumo_parent")
     f_adj_child_tsumo_child=$(format_number "$adj_child_tsumo_child")
 
-    # 親ロン: "base は adjusted"
+    # 親ロン: "base は adjusted" （は の前に間を確保）
     count=$((count + 1))
-    text="${f_parent_ron}は、${f_adj_parent_ron}"
+    text="${f_parent_ron}[[slnc 100]]は、${f_adj_parent_ron}"
     echo "[$count/$total] parent_ron_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_ron_${id}_h${h}.mp3"
 
     # 子ロン: "base は adjusted"
     count=$((count + 1))
-    text="${f_child_ron}は、${f_adj_child_ron}"
+    text="${f_child_ron}[[slnc 100]]は、${f_adj_child_ron}"
     echo "[$count/$total] child_ron_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/child_ron_${id}_h${h}.mp3"
 
     # 親ツモ: "base は adjusted オール"
     count=$((count + 1))
-    text="${f_parent_tsumo_all}は、${f_adj_parent_tsumo_all}オール"
+    text="${f_parent_tsumo_all}[[slnc 100]]は、${f_adj_parent_tsumo_all}オール"
     echo "[$count/$total] parent_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}_h${h}.mp3"
 
     # 子ツモ: "childBase、parentBase は childAdj、parentAdj"
     count=$((count + 1))
-    text="${f_child_tsumo_child}、${f_child_tsumo_parent}は、${f_adj_child_tsumo_child}、${f_adj_child_tsumo_parent}"
+    text="${f_child_tsumo_child}、${f_child_tsumo_parent}[[slnc 100]]は、${f_adj_child_tsumo_child}、${f_adj_child_tsumo_parent}"
     echo "[$count/$total] child_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/child_tsumo_${id}_h${h}.mp3"
   done
