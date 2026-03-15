@@ -176,27 +176,27 @@ for score_data in "${SCORES[@]}"; do
     f_adj_child_tsumo_parent=$(format_number "$adj_child_tsumo_parent")
     f_adj_child_tsumo_child=$(format_number "$adj_child_tsumo_child")
 
-    # 親ロン: "base わ adjusted" （わ の前に間を確保）
+    # 親ロン: "base わ adjusted"
     count=$((count + 1))
-    text="${f_parent_ron}[[slnc 50]]わ ${f_adj_parent_ron}"
+    text="${f_parent_ron}わ ${f_adj_parent_ron}"
     echo "[$count/$total] parent_ron_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_ron_${id}_h${h}.mp3"
 
     # 子ロン: "base わ adjusted"
     count=$((count + 1))
-    text="${f_child_ron}[[slnc 50]]わ ${f_adj_child_ron}"
+    text="${f_child_ron}わ ${f_adj_child_ron}"
     echo "[$count/$total] child_ron_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/child_ron_${id}_h${h}.mp3"
 
     # 親ツモ: "base わ adjusted オール"
     count=$((count + 1))
-    text="${f_parent_tsumo_all}[[slnc 50]]わ ${f_adj_parent_tsumo_all} おーる"
+    text="${f_parent_tsumo_all}わ ${f_adj_parent_tsumo_all} おーる"
     echo "[$count/$total] parent_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/parent_tsumo_${id}_h${h}.mp3"
 
     # 子ツモ: "childBase、parentBase わ childAdj、parentAdj"
     count=$((count + 1))
-    text="${f_child_tsumo_child}、${f_child_tsumo_parent}[[slnc 50]]わ ${f_adj_child_tsumo_child}、${f_adj_child_tsumo_parent}"
+    text="${f_child_tsumo_child}、${f_child_tsumo_parent}わ ${f_adj_child_tsumo_child}、${f_adj_child_tsumo_parent}"
     echo "[$count/$total] child_tsumo_${id}_h${h}.mp3 - $text"
     generate_audio "$text" "$AUDIO_DIR/child_tsumo_${id}_h${h}.mp3"
   done
