@@ -100,6 +100,50 @@ format_number() {
   fi
 }
 
+# 数値を全てひらがなに変換（クロスフェード用）
+number_to_hiragana() {
+  local num=$1
+  local result=""
+  local remaining=$num
+
+  if [ "$remaining" -ge 10000 ]; then
+    local man=$((remaining / 10000))
+    case $man in
+      1) result="${result}いちまん" ;; 2) result="${result}にまん" ;;
+      3) result="${result}さんまん" ;; 4) result="${result}よんまん" ;;
+      5) result="${result}ごまん" ;; 6) result="${result}ろくまん" ;;
+      7) result="${result}ななまん" ;; 8) result="${result}はちまん" ;;
+      9) result="${result}きゅうまん" ;;
+    esac
+    remaining=$((remaining % 10000))
+  fi
+
+  if [ "$remaining" -ge 1000 ]; then
+    local sen=$((remaining / 1000))
+    case $sen in
+      1) result="${result}せん" ;; 2) result="${result}にせん" ;;
+      3) result="${result}さんぜん" ;; 4) result="${result}よんせん" ;;
+      5) result="${result}ごせん" ;; 6) result="${result}ろくせん" ;;
+      7) result="${result}ななせん" ;; 8) result="${result}はっせん" ;;
+      9) result="${result}きゅうせん" ;;
+    esac
+    remaining=$((remaining % 1000))
+  fi
+
+  if [ "$remaining" -ge 100 ]; then
+    local hyaku=$((remaining / 100))
+    case $hyaku in
+      1) result="${result}ひゃく" ;; 2) result="${result}にひゃく" ;;
+      3) result="${result}さんびゃく" ;; 4) result="${result}よんひゃく" ;;
+      5) result="${result}ごひゃく" ;; 6) result="${result}ろっぴゃく" ;;
+      7) result="${result}ななひゃく" ;; 8) result="${result}はっぴゃく" ;;
+      9) result="${result}きゅうひゃく" ;;
+    esac
+  fi
+
+  echo "$result"
+}
+
 # 音声ファイル生成関数
 generate_audio() {
   local text="$1"
@@ -111,6 +155,30 @@ generate_audio() {
   rm -f "$temp_aiff"
 }
 
+# 前半・後半を分割生成しクロスフェード50msで結合
+generate_audio_crossfade() {
+  local front_text="$1"
+  local back_text="$2"
+  local output_file="$3"
+  local base="$TEMP_DIR/$(basename "$output_file" .mp3)"
+
+  say -v "Otoya (Enhanced)" -o "${base}_front.aiff" "$front_text"
+  say -v "Otoya (Enhanced)" -o "${base}_back.aiff" "$back_text"
+  ffmpeg -y -i "${base}_front.aiff" -af "volume=2.0" -f wav "${base}_front.wav" 2>/dev/null
+  ffmpeg -y -i "${base}_back.aiff" -af "volume=2.0" -f wav "${base}_back.wav" 2>/dev/null
+  ffmpeg -y -i "${base}_front.wav" -i "${base}_back.wav" \
+    -filter_complex "[0:a][1:a]acrossfade=d=0.05:c1=tri:c2=tri[out]" -map "[out]" \
+    -acodec libmp3lame -ab 64k -ac 1 -ar 22050 "$output_file" 2>/dev/null
+  rm -f "${base}_front.aiff" "${base}_back.aiff" "${base}_front.wav" "${base}_back.wav"
+}
+
+# 千X百のパターンでイントネーション問題が起きるか判定
+# 1000以上かつ百の位が400の数値が先頭に来る場合に該当
+needs_crossfade() {
+  local num=$1
+  [ "$num" -ge 1000 ] && [ $((num % 1000)) -eq 400 ]
+}
+
 # 点数表データ（ID、親ロン、子ロン、親ツモAll、子ツモParent、子ツモChild）
 declare -a SCORES=(
   "1-30 1500 1000 500 500 300"
@@ -118,12 +186,17 @@ declare -a SCORES=(
   "1-50 2400 1600 800 800 400"
   "1-60 2900 2000 1000 1000 500"
   "1-70 3400 2300 1200 1200 600"
+  "1-90 4400 2900 1500 1500 800"
+  "1-100 4800 3200 1600 1600 800"
   "2-25 2400 1600 800 800 400"
   "2-30 2900 2000 1000 1000 500"
   "2-40 3900 2600 1300 1300 700"
   "2-50 4800 3200 1600 1600 800"
   "2-60 5800 3900 2000 2000 1000"
   "2-70 6800 4500 2300 2300 1200"
+  "2-90 8700 5800 2900 2900 1500"
+  "2-100 9600 6400 3200 3200 1600"
+  "2-110 10600 7100 3600 3600 1800"
   "3-25 4800 3200 1600 1600 800"
   "3-30 5800 3900 2000 2000 1000"
   "3-40 7700 5200 2600 2600 1300"
@@ -216,9 +289,17 @@ for score_data in "${SCORES[@]}"; do
 
     # 子ツモ: "childBase、parentBaseは、childAdj、parentAdj"
     count=$((count + 1))
-    text="${h_ctc}、${h_ctp}は、${h_actc}、${h_actp}"
-    echo "[$count/$total] child_tsumo_${id}_h${h}.mp3 - $text"
-    generate_audio "$text" "$AUDIO_DIR/child_tsumo_${id}_h${h}.mp3"
+    if needs_crossfade "$adj_child_tsumo_child"; then
+      front="${h_ctc}、${h_ctp}は"
+      hira_actc=$(number_to_hiragana "$adj_child_tsumo_child")
+      back="${hira_actc}、${h_actp}"
+      echo "[$count/$total] child_tsumo_${id}_h${h}.mp3 - [XF] ${front} | ${back}"
+      generate_audio_crossfade "$front" "$back" "$AUDIO_DIR/child_tsumo_${id}_h${h}.mp3"
+    else
+      text="${h_ctc}、${h_ctp}は、${h_actc}、${h_actp}"
+      echo "[$count/$total] child_tsumo_${id}_h${h}.mp3 - $text"
+      generate_audio "$text" "$AUDIO_DIR/child_tsumo_${id}_h${h}.mp3"
+    fi
   done
 done
 
