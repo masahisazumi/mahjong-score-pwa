@@ -53,6 +53,11 @@ fix_hundreds() {
     return
   fi
   local hundreds=$((num % 1000))
+  if [ "$hundreds" -eq 0 ] && [ "$num" -ge 1000 ]; then
+    local sen=$(sen_reading "$num")
+    echo "$sen"
+    return
+  fi
   if [ "$hundreds" -eq 200 ] || [ "$hundreds" -eq 400 ]; then
     local sen=$(sen_reading "$num")
     local hyaku=""
@@ -68,32 +73,18 @@ fix_hundreds() {
 }
 
 # 数字をTTS用テキストに変換
-# - 万未満: 数字のまま（sayの自然な読み）+ 400のみひらがな補正
-# - 万以上: ひらがな万 + [[slnc 50]] + 残りを数字
-#   （万と千を自然につなげつつ 11600等の「いっせん」→「せん」自動修正）
+# - 万未満: 数字のまま（sayの自然な読み）+ 千ちょうど/200/400のみひらがな補正
+# - 万以上で千ちょうど（12000等）: 数字のまま（sayの自然な読み）
+# - 万以上で端数あり（11600等）: 全ひらがな（sayの「いっせん」誤読回避）
 format_number() {
   local num=$1
 
   if [ "$num" -ge 10000 ]; then
-    local man=$((num / 10000))
     local rest=$((num % 10000))
-    local man_reading=""
-    case $man in
-      1) man_reading="いちまん" ;;
-      2) man_reading="にまん" ;;
-      3) man_reading="さんまん" ;;
-      4) man_reading="よんまん" ;;
-      5) man_reading="ごまん" ;;
-      6) man_reading="ろくまん" ;;
-      7) man_reading="ななまん" ;;
-      8) man_reading="はちまん" ;;
-      9) man_reading="きゅうまん" ;;
-    esac
-    if [ "$rest" -gt 0 ]; then
-      local formatted_rest=$(fix_hundreds "$rest")
-      echo "${man_reading}[[slnc 50]]${formatted_rest}"
+    if [ "$rest" -eq 0 ] || [ $((rest % 1000)) -eq 0 ]; then
+      echo "$num"
     else
-      echo "${man_reading}"
+      number_to_hiragana "$num"
     fi
   else
     fix_hundreds "$num"
